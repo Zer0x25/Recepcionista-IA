@@ -15,10 +15,7 @@ const AdminByContactParamsSchema = z.object({
 });
 
 const AdminQuerySchema = z.object({
-  limitMessages: z
-    .preprocess((val) => Number(val), z.number().int().min(1).max(200))
-    .optional()
-    .default(50),
+  limitMessages: z.coerce.number().int().min(1).max(200).default(50),
 });
 
 export async function adminRoutes(fastify: FastifyInstance) {
