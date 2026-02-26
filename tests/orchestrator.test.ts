@@ -91,7 +91,7 @@ describe("Orchestrator & State Machine", () => {
 
     expect(conversation).toBeDefined();
     // Transitions: NEW -> CLASSIFYING -> ANSWERING -> WAITING_USER
-    expect(conversation?.transitions.length).toBeGreaterThanOrEqual(1);
+    expect(conversation?.transitions.length).toBeGreaterThanOrEqual(3);
 
     conversation?.transitions.forEach((t) => {
       expect(t.fromState).not.toBe(t.toState);

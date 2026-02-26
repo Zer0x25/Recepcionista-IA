@@ -108,20 +108,30 @@ async function transitionState(
 ): Promise<State> {
   const transitionLogger = logger.child({ requestId, conversationId });
 
-  await prisma.conversation.update({
-    where: { id: conversationId },
-    data: { state: to },
-  });
+  if (from === to) {
+    transitionLogger.info({
+      msg: "State transition skipped (no-op)",
+      eventType: "state_transition_skipped_noop",
+      providerMessageId,
+      state: to,
+    });
+    return to;
+  }
 
-  // Persist transition for audit layer
-  await prisma.stateTransition.create({
-    data: {
-      conversationId,
-      fromState: from,
-      toState: to,
-      triggeredBy: providerMessageId,
-    },
-  });
+  await prisma.$transaction([
+    prisma.conversation.update({
+      where: { id: conversationId },
+      data: { state: to },
+    }),
+    prisma.stateTransition.create({
+      data: {
+        conversationId,
+        fromState: from,
+        toState: to,
+        triggeredBy: providerMessageId,
+      },
+    }),
+  ]);
 
   transitionLogger.info({
     msg: "State transition",
