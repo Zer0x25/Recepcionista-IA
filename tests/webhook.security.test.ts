@@ -6,6 +6,7 @@ import { prisma } from "../src/persistence/prisma.js";
 describe("Twilio Webhook Security (Audit)", () => {
   beforeAll(async () => {
     await fastify.ready();
+    await prisma.stateTransition.deleteMany();
     await prisma.message.deleteMany();
     await prisma.conversation.deleteMany();
   });

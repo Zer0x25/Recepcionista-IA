@@ -9,6 +9,7 @@ describe("Twilio Webhook Idempotency", () => {
     process.env.ALLOW_INSECURE_WEBHOOK = "true";
     process.env.NODE_ENV = "development";
     // Clean up DB before tests
+    await prisma.stateTransition.deleteMany();
     await prisma.message.deleteMany();
     await prisma.conversation.deleteMany();
   });

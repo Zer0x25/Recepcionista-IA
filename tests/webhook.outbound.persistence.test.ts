@@ -8,6 +8,7 @@ describe("Twilio Webhook Outbound Persistence (Audit)", () => {
     await fastify.ready();
     process.env.ALLOW_INSECURE_WEBHOOK = "true";
     process.env.NODE_ENV = "development"; // to allow business logic to proceed normally if needed
+    await prisma.stateTransition.deleteMany();
     await prisma.message.deleteMany();
     await prisma.conversation.deleteMany();
   });

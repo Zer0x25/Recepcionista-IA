@@ -27,8 +27,8 @@ describe("Twilio Webhook Rate Limiting (Audit)", () => {
       AccountSid: "AC_TEST",
     };
 
-    // max: 3 in test environment
-    for (let i = 0; i < 3; i++) {
+    // max: 20 in test environment
+    for (let i = 0; i < 20; i++) {
       const resp = await supertest(fastify.server)
         .post("/webhooks/twilio")
         .send(
