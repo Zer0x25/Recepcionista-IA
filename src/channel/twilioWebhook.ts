@@ -8,9 +8,14 @@ import { State } from "@prisma/client";
 import twilio from "twilio";
 import { randomUUID } from "node:crypto";
 
-async function verifyTwilioSignature(req: FastifyRequest): Promise<boolean> {
+async function verifyTwilioSignature(
+  req: FastifyRequest,
+  requestId?: string,
+): Promise<boolean> {
   const twilioAuthToken = process.env.TWILIO_AUTH_TOKEN;
   const signature = req.headers["x-twilio-signature"] as string;
+
+  const requestLogger = requestId ? logger.child({ requestId }) : logger;
 
   if (
     process.env.NODE_ENV !== "production" &&
@@ -20,7 +25,7 @@ async function verifyTwilioSignature(req: FastifyRequest): Promise<boolean> {
   }
 
   if (!twilioAuthToken || !signature) {
-    logger.warn({
+    requestLogger.warn({
       msg: "Twilio signature or auth token missing",
       hasSignature: !!signature,
       hasToken: !!twilioAuthToken,
@@ -42,7 +47,7 @@ async function verifyTwilioSignature(req: FastifyRequest): Promise<boolean> {
   );
 
   if (!isValid) {
-    logger.warn({
+    requestLogger.warn({
       msg: "Invalid Twilio signature",
       url,
       eventType: "WEBHOOK_SECURITY_DENIED",
@@ -57,9 +62,11 @@ export async function twilioWebhookHandler(fastify: FastifyInstance) {
     "/webhooks/twilio",
     async (request: FastifyRequest, reply: FastifyReply) => {
       const startTime = Date.now();
+      const { requestId } = request;
+      const requestLogger = logger.child({ requestId });
 
       // 1. Validate signature
-      const isValid = await verifyTwilioSignature(request);
+      const isValid = await verifyTwilioSignature(request, requestId);
       if (!isValid) {
         return reply.code(401).send({ error: "Unauthorized" });
       }
@@ -67,7 +74,7 @@ export async function twilioWebhookHandler(fastify: FastifyInstance) {
       // 2. Validate payload
       const result = TwilioWebhookSchema.safeParse(request.body);
       if (!result.success) {
-        logger.error({
+        requestLogger.error({
           msg: "Invalid Twilio payload",
           eventType: "WEBHOOK_VALIDATION_FAILED",
           errors: result.error.format(),
@@ -90,7 +97,7 @@ export async function twilioWebhookHandler(fastify: FastifyInstance) {
         });
 
         if (existingMessage) {
-          logger.info({
+          requestLogger.info({
             msg: "Duplicate message received",
             eventType: "WEBHOOK_DUPLICATE_IDEMPOTENCY",
             providerMessageId,
@@ -105,6 +112,10 @@ export async function twilioWebhookHandler(fastify: FastifyInstance) {
           where: { providerContact: fromNumber },
           update: {},
           create: { providerContact: fromNumber },
+        });
+
+        const contextualLogger = requestLogger.child({
+          conversationId: conversation.id,
         });
 
         // Save message
@@ -122,6 +133,7 @@ export async function twilioWebhookHandler(fastify: FastifyInstance) {
         const finalState = await processIncomingMessage(
           conversation.id,
           providerMessageId,
+          requestId,
         );
 
         // 6. Response Construction & Persistence
@@ -130,10 +142,9 @@ export async function twilioWebhookHandler(fastify: FastifyInstance) {
         let twiml = "";
 
         if (finalState === State.HANDOFF) {
-          logger.info({
+          contextualLogger.info({
             msg: "Suppressing automatic response due to HANDOFF state",
             eventType: "WEBHOOK_PROCESSED",
-            conversationId: conversation.id,
             providerMessageId,
             durationMs: Date.now() - startTime,
           });
@@ -153,10 +164,9 @@ export async function twilioWebhookHandler(fastify: FastifyInstance) {
             },
           });
 
-          logger.info({
+          contextualLogger.info({
             msg: "Message processed successfully",
             eventType: "WEBHOOK_PROCESSED",
-            conversationId: conversation.id,
             providerMessageId,
             outboundProviderMessageId,
             durationMs: Date.now() - startTime,
@@ -165,7 +175,7 @@ export async function twilioWebhookHandler(fastify: FastifyInstance) {
 
         return reply.code(200).type("text/xml").send(twiml);
       } catch (error) {
-        logger.error({
+        requestLogger.error({
           msg: "Error processing webhook",
           eventType: "WEBHOOK_ERROR",
           error: error instanceof Error ? error.message : String(error),

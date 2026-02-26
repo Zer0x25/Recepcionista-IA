@@ -7,8 +7,10 @@ import { shouldHandoff } from "../rules/handoff.js";
 export async function processIncomingMessage(
   conversationId: string,
   providerMessageId: string,
+  requestId?: string,
 ) {
   const startTime = Date.now();
+  const orchestratorLogger = logger.child({ requestId, conversationId });
 
   try {
     const conversation = await prisma.conversation.findUnique({
@@ -28,9 +30,8 @@ export async function processIncomingMessage(
     const lastMessage = conversation.messages[0];
     const initialState = conversation.state;
 
-    logger.info({
+    orchestratorLogger.info({
       msg: "Processing message in orchestrator",
-      conversationId,
       providerMessageId,
       currentState: initialState,
     });
@@ -43,6 +44,7 @@ export async function processIncomingMessage(
         currentState,
         State.CLASSIFYING,
         providerMessageId,
+        requestId,
       );
     }
 
@@ -63,6 +65,7 @@ export async function processIncomingMessage(
         currentState,
         nextState,
         providerMessageId,
+        requestId,
       );
     }
 
@@ -76,22 +79,21 @@ export async function processIncomingMessage(
         currentState,
         State.WAITING_USER,
         providerMessageId,
+        requestId,
       );
     }
 
-    logger.info({
+    orchestratorLogger.info({
       msg: "Orchestrator processing complete",
-      conversationId,
       finalState: currentState,
       durationMs: Date.now() - startTime,
     });
 
     return currentState;
   } catch (error) {
-    logger.error({
+    orchestratorLogger.error({
       msg: "Orchestrator error",
       error: error instanceof Error ? error.message : String(error),
-      conversationId,
     });
     throw error;
   }
@@ -102,16 +104,18 @@ async function transitionState(
   from: State,
   to: State,
   providerMessageId: string,
+  requestId?: string,
 ): Promise<State> {
+  const transitionLogger = logger.child({ requestId, conversationId });
+
   await prisma.conversation.update({
     where: { id: conversationId },
     data: { state: to },
   });
 
-  logger.info({
+  transitionLogger.info({
     msg: "State transition",
     eventType: "state_transition",
-    conversationId,
     providerMessageId,
     state_from: from,
     state_to: to,

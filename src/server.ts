@@ -7,8 +7,20 @@ import dotenv from "dotenv";
 
 dotenv.config();
 
+import { randomUUID } from "node:crypto";
+
 const fastify = Fastify({
   logger: false, // We use our own Pino logger
+});
+
+declare module "fastify" {
+  interface FastifyRequest {
+    requestId: string;
+  }
+}
+
+fastify.addHook("onRequest", async (request, reply) => {
+  request.requestId = randomUUID();
 });
 
 import rateLimit from "@fastify/rate-limit";

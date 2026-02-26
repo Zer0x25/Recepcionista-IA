@@ -8,6 +8,7 @@ describe("Orchestrator & State Machine", () => {
   const fromNumber = "+1112223333";
 
   beforeAll(async () => {
+    process.env.ALLOW_INSECURE_WEBHOOK = "true";
     await fastify.ready();
   });
 
@@ -19,6 +20,7 @@ describe("Orchestrator & State Machine", () => {
   afterAll(async () => {
     await fastify.close();
     await prisma.$disconnect();
+    process.env.ALLOW_INSECURE_WEBHOOK = "false";
   });
 
   it("should flow NEW -> CLASSIFYING -> ANSWERING -> WAITING_USER for normal message", async () => {
