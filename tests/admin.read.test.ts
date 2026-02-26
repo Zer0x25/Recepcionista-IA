@@ -3,10 +3,14 @@ import supertest from "supertest";
 import { fastify } from "../src/server.js";
 import { prisma } from "../src/persistence/prisma.js";
 import { State } from "@prisma/client";
+import { logger } from "../src/observability/logger.js";
+import { makeTestLogger } from "./testUtils.js";
 
 describe("Admin Read API (Debug)", () => {
   const ADMIN_KEY = "test-admin-key";
   const fromNumber = "+1234567890";
+
+  let capturedLogs: any[] = [];
 
   beforeAll(async () => {
     process.env.ADMIN_API_KEY = ADMIN_KEY;
@@ -17,12 +21,21 @@ describe("Admin Read API (Debug)", () => {
     await prisma.stateTransition.deleteMany();
     await prisma.message.deleteMany();
     await prisma.conversation.deleteMany();
+
+    const { loggerFake, getLogs } = makeTestLogger();
+    capturedLogs = getLogs();
+    jest.spyOn(logger, "child").mockImplementation((context) => {
+      return loggerFake.child(context);
+    });
+  });
+
+  afterEach(() => {
+    jest.restoreAllMocks();
   });
 
   afterAll(async () => {
     await fastify.close();
     await prisma.$disconnect();
-    // process.env.ADMIN_API_KEY = undefined;
   });
 
   const setupMockData = async () => {
@@ -77,6 +90,13 @@ describe("Admin Read API (Debug)", () => {
         .get("/admin/conversations/00000000-0000-0000-0000-000000000000")
         .set("x-admin-key", "wrong-key");
       expect(resp.status).toBe(401);
+
+      const log = capturedLogs.find(
+        (l) => l.eventType === "ADMIN_READ_UNAUTHORIZED",
+      );
+      expect(log).toBeDefined();
+      expect(log.requestId).toBeDefined();
+      expect(log.scope).toBe("admin");
     });
 
     it("should return 400 if id is not a UUID", async () => {
@@ -84,6 +104,12 @@ describe("Admin Read API (Debug)", () => {
         .get("/admin/conversations/not-a-uuid")
         .set("x-admin-key", ADMIN_KEY);
       expect(resp.status).toBe(400);
+
+      const log = capturedLogs.find(
+        (l) => l.eventType === "ADMIN_READ_INVALID_PARAMS",
+      );
+      expect(log).toBeDefined();
+      expect(log.durationMs).toBeDefined();
     });
 
     it("should return 404 if conversation does not exist", async () => {
@@ -92,6 +118,13 @@ describe("Admin Read API (Debug)", () => {
         .get(`/admin/conversations/${id}`)
         .set("x-admin-key", ADMIN_KEY);
       expect(resp.status).toBe(404);
+
+      const log = capturedLogs.find(
+        (l) => l.eventType === "ADMIN_READ_NOT_FOUND",
+      );
+      expect(log).toBeDefined();
+      expect(log.conversationId).toBe(id);
+      expect(log.durationMs).toBeDefined();
     });
 
     it("should return the conversation snapshot if authorized and exists", async () => {
@@ -108,6 +141,14 @@ describe("Admin Read API (Debug)", () => {
       });
       expect(resp.body.messages.length).toBe(2);
       expect(resp.body.transitions.length).toBe(1);
+
+      const log = capturedLogs.find(
+        (l) => l.eventType === "ADMIN_READ_SUCCESS",
+      );
+      expect(log).toBeDefined();
+      expect(log.conversationId).toBe(conversation.id);
+      expect(log.durationMs).toBeDefined();
+      expect(log.requestId).toBeDefined();
     });
 
     it("should respect limitMessages query param", async () => {
