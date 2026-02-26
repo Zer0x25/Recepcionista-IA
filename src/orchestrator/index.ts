@@ -113,6 +113,16 @@ async function transitionState(
     data: { state: to },
   });
 
+  // Persist transition for audit layer
+  await prisma.stateTransition.create({
+    data: {
+      conversationId,
+      fromState: from,
+      toState: to,
+      triggeredBy: providerMessageId,
+    },
+  });
+
   transitionLogger.info({
     msg: "State transition",
     eventType: "state_transition",
