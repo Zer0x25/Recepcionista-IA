@@ -5,15 +5,50 @@ import { TwilioWebhookSchema } from "../validation/twilioSchema.js";
 import { processIncomingMessage } from "../orchestrator/index.js";
 import { State } from "@prisma/client";
 
+import twilio from "twilio";
+
 async function verifyTwilioSignature(req: FastifyRequest): Promise<boolean> {
-  // STUB: Verify signature if TWILIO_AUTH_TOKEN is present in headers/env
-  // For now, return true to allow development
-  const signature = req.headers["x-twilio-signature"];
-  if (!signature) {
-    logger.warn({ msg: "Twilio signature missing" });
-    return process.env.NODE_ENV !== "production";
+  const twilioAuthToken = process.env.TWILIO_AUTH_TOKEN;
+  const signature = req.headers["x-twilio-signature"] as string;
+
+  if (
+    process.env.NODE_ENV !== "production" &&
+    process.env.ALLOW_INSECURE_WEBHOOK === "true"
+  ) {
+    return true;
   }
-  return true;
+
+  if (!twilioAuthToken || !signature) {
+    logger.warn({
+      msg: "Twilio signature or auth token missing",
+      hasSignature: !!signature,
+      hasToken: !!twilioAuthToken,
+      eventType: "WEBHOOK_SECURITY_DENIED",
+    });
+    return false;
+  }
+
+  // Construct the exact URL used by Twilio
+  const protocol = req.headers["x-forwarded-proto"] || "http";
+  const host = req.headers["host"];
+  const url = `${protocol}://${host}${req.url}`;
+
+  const isValid = (twilio as any).validateRequest(
+    twilioAuthToken,
+    signature,
+    url,
+    req.body as Record<string, any>,
+  );
+
+  if (!isValid) {
+    logger.warn({
+      msg: "Invalid Twilio signature",
+      url,
+      eventType: "WEBHOOK_SECURITY_DENIED",
+    });
+  }
+
+  return isValid;
 }
 
 export async function twilioWebhookHandler(fastify: FastifyInstance) {
@@ -21,6 +56,12 @@ export async function twilioWebhookHandler(fastify: FastifyInstance) {
     "/webhooks/twilio",
     async (request: FastifyRequest, reply: FastifyReply) => {
       const startTime = Date.now();
+      const clientIp = request.ip;
+      const providerContact = (request.body as any)?.From || "unknown";
+
+      // 0. Rate limiting is applied at the plugin level globally,
+      // but we can add specific config here if needed via fastify.post options.
+      // Already registered in server.ts.
 
       // 1. Validate signature
       const isValid = await verifyTwilioSignature(request);
@@ -33,8 +74,10 @@ export async function twilioWebhookHandler(fastify: FastifyInstance) {
       if (!result.success) {
         logger.error({
           msg: "Invalid Twilio payload",
+          eventType: "WEBHOOK_VALIDATION_FAILED",
           errors: result.error.format(),
           payload: request.body,
+          durationMs: Date.now() - startTime,
         });
         return reply.code(400).send({ error: "Invalid payload" });
       }
@@ -54,6 +97,7 @@ export async function twilioWebhookHandler(fastify: FastifyInstance) {
         if (existingMessage) {
           logger.info({
             msg: "Duplicate message received",
+            eventType: "WEBHOOK_DUPLICATE_IDEMPOTENCY",
             providerMessageId,
             durationMs: Date.now() - startTime,
           });
@@ -85,36 +129,53 @@ export async function twilioWebhookHandler(fastify: FastifyInstance) {
           providerMessageId,
         );
 
-        // 6. Response Construction
-        // If HANDOFF, we don't send any automatic response (human will take over)
+        // 6. Response Construction & Persistence
+        const outboundProviderMessageId = `internal-${crypto.randomUUID()}`;
+        let responseContent = "";
+        let twiml = "";
+
         if (finalState === State.HANDOFF) {
           logger.info({
             msg: "Suppressing automatic response due to HANDOFF state",
+            eventType: "WEBHOOK_PROCESSED",
             conversationId: conversation.id,
             providerMessageId,
+            durationMs: Date.now() - startTime,
           });
-          return reply.code(200).type("text/xml").send("<Response></Response>");
+          twiml = "<Response></Response>";
+        } else {
+          responseContent = `Placeholder: Recibido (Estado: ${finalState})`;
+          twiml = `<Response><Message>${responseContent}</Message></Response>`;
+
+          // Persist OUTBOUND message
+          await prisma.message.create({
+            data: {
+              conversationId: conversation.id,
+              providerMessageId: outboundProviderMessageId,
+              direction: "OUTBOUND",
+              content: responseContent,
+              payload: { twiml } as any,
+            },
+          });
+
+          logger.info({
+            msg: "Message processed successfully",
+            eventType: "WEBHOOK_PROCESSED",
+            conversationId: conversation.id,
+            providerMessageId,
+            outboundProviderMessageId,
+            durationMs: Date.now() - startTime,
+          });
         }
 
-        logger.info({
-          msg: "Message processed successfully",
-          eventType: "WEBHOOK_RECEIVED",
-          conversationId: conversation.id,
-          providerMessageId,
-          durationMs: Date.now() - startTime,
-        });
-
-        return reply
-          .code(200)
-          .type("text/xml")
-          .send(
-            `<Response><Message>Placeholder: Recibido (Estado: ${finalState})</Message></Response>`,
-          );
+        return reply.code(200).type("text/xml").send(twiml);
       } catch (error) {
         logger.error({
           msg: "Error processing webhook",
+          eventType: "WEBHOOK_ERROR",
           error: error instanceof Error ? error.message : String(error),
           providerMessageId,
+          durationMs: Date.now() - startTime,
         });
         return reply.code(500).send({ error: "Internal Server Error" });
       }

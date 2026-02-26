@@ -6,6 +6,8 @@ import { prisma } from "../src/persistence/prisma.js";
 describe("Twilio Webhook Idempotency", () => {
   beforeAll(async () => {
     await fastify.ready();
+    process.env.ALLOW_INSECURE_WEBHOOK = "true";
+    process.env.NODE_ENV = "development";
     // Clean up DB before tests
     await prisma.message.deleteMany();
     await prisma.conversation.deleteMany();

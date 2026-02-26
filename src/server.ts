@@ -11,8 +11,14 @@ const fastify = Fastify({
   logger: false, // We use our own Pino logger
 });
 
+import rateLimit from "@fastify/rate-limit";
+
 // Register plugins
 await fastify.register(formBody);
+await fastify.register(rateLimit, {
+  max: process.env.NODE_ENV === "test" ? 3 : 100,
+  timeWindow: "1 minute",
+});
 
 // Register routes
 await fastify.register(twilioWebhookHandler);
