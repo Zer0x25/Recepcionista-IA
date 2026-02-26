@@ -121,6 +121,16 @@ describe("Admin Read API (Debug)", () => {
       // Order should be desc by createdAt
       expect(resp.body.messages[0].providerMessageId).toBe("MSG_2");
     });
+
+    it("should use default limitMessages if not provided", async () => {
+      const conversation = await setupMockData();
+      const resp = await supertest(fastify.server)
+        .get(`/admin/conversations/${conversation.id}`)
+        .set("x-admin-key", ADMIN_KEY);
+
+      expect(resp.status).toBe(200);
+      expect(resp.body.messages.length).toBe(2);
+    });
   });
 
   describe("GET /admin/conversations/by-contact/:providerContact", () => {
@@ -141,6 +151,18 @@ describe("Admin Read API (Debug)", () => {
 
       expect(resp.status).toBe(200);
       expect(resp.body.id).toBe(conversation.id);
+    });
+
+    it("should use default limitMessages if not provided", async () => {
+      await setupMockData();
+      const resp = await supertest(fastify.server)
+        .get(
+          `/admin/conversations/by-contact/${encodeURIComponent(fromNumber)}`,
+        )
+        .set("x-admin-key", ADMIN_KEY);
+
+      expect(resp.status).toBe(200);
+      expect(resp.body.messages.length).toBe(2);
     });
   });
 });
