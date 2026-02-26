@@ -2,6 +2,7 @@ import Fastify from "fastify";
 import formBody from "@fastify/formbody";
 import { logger } from "./observability/logger.js";
 import { twilioWebhookHandler } from "./channel/twilioWebhook.js";
+import { adminRoutes } from "./admin/adminRoutes.js";
 import { prisma } from "./persistence/prisma.js";
 import dotenv from "dotenv";
 
@@ -28,7 +29,7 @@ import rateLimit from "@fastify/rate-limit";
 // Register plugins
 await fastify.register(formBody);
 await fastify.register(rateLimit, {
-  max: process.env.NODE_ENV === "test" ? 3 : 100,
+  max: process.env.NODE_ENV === "test" ? 20 : 100,
   timeWindow: "1 minute",
   hook: "preValidation",
   keyGenerator: (request) => {
@@ -49,6 +50,7 @@ await fastify.register(rateLimit, {
 
 // Register routes
 await fastify.register(twilioWebhookHandler);
+await fastify.register(adminRoutes);
 
 const start = async () => {
   try {
