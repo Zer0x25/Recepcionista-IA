@@ -18,6 +18,20 @@ await fastify.register(formBody);
 await fastify.register(rateLimit, {
   max: process.env.NODE_ENV === "test" ? 3 : 100,
   timeWindow: "1 minute",
+  hook: "preValidation",
+  keyGenerator: (request) => {
+    // If request has 'From' in body (Twilio webhook), use it
+    const from = (request.body as any)?.From;
+    return from || request.ip;
+  },
+  onExceeding: (request, key) => {
+    logger.warn({
+      msg: "Rate limit exceeded",
+      eventType: "WEBHOOK_RATE_LIMITED",
+      key,
+      ip: request.ip,
+    });
+  },
 });
 
 // Register routes
@@ -26,17 +40,30 @@ await fastify.register(twilioWebhookHandler);
 const start = async () => {
   try {
     const port = Number(process.env.PORT) || 3000;
-    await fastify.listen({ port, host: "0.0.0.0" });
-    logger.info(`Server listening on http://localhost:${port}`);
+    const host = "0.0.0.0";
+    await fastify.listen({ port, host });
+    logger.info({
+      msg: "Server started",
+      eventType: "SERVER_START",
+      port,
+      host,
+    });
   } catch (err) {
-    logger.error(err);
+    logger.error({
+      msg: "Server failed to start",
+      eventType: "SERVER_ERROR",
+      error: err instanceof Error ? err.message : String(err),
+    });
     process.exit(1);
   }
 };
 
 // Graceful shutdown
 const shutdown = async () => {
-  logger.info("Shutting down server...");
+  logger.info({
+    msg: "Shutting down server",
+    eventType: "SERVER_SHUTDOWN",
+  });
   await fastify.close();
   await prisma.$disconnect();
   process.exit(0);

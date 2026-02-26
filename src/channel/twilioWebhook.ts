@@ -6,6 +6,7 @@ import { processIncomingMessage } from "../orchestrator/index.js";
 import { State } from "@prisma/client";
 
 import twilio from "twilio";
+import { randomUUID } from "node:crypto";
 
 async function verifyTwilioSignature(req: FastifyRequest): Promise<boolean> {
   const twilioAuthToken = process.env.TWILIO_AUTH_TOKEN;
@@ -56,12 +57,6 @@ export async function twilioWebhookHandler(fastify: FastifyInstance) {
     "/webhooks/twilio",
     async (request: FastifyRequest, reply: FastifyReply) => {
       const startTime = Date.now();
-      const clientIp = request.ip;
-      const providerContact = (request.body as any)?.From || "unknown";
-
-      // 0. Rate limiting is applied at the plugin level globally,
-      // but we can add specific config here if needed via fastify.post options.
-      // Already registered in server.ts.
 
       // 1. Validate signature
       const isValid = await verifyTwilioSignature(request);
@@ -130,7 +125,7 @@ export async function twilioWebhookHandler(fastify: FastifyInstance) {
         );
 
         // 6. Response Construction & Persistence
-        const outboundProviderMessageId = `internal-${crypto.randomUUID()}`;
+        const outboundProviderMessageId = `internal-${randomUUID()}`;
         let responseContent = "";
         let twiml = "";
 
