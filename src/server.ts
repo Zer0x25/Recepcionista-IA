@@ -40,6 +40,7 @@ await fastify.register(rateLimit, {
     logger.warn({
       msg: "Rate limit exceeded",
       eventType: "WEBHOOK_RATE_LIMITED",
+      requestId: (request as any).requestId,
       key,
       ip: request.ip,
     });

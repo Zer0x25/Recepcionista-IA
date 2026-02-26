@@ -10,12 +10,10 @@ import { randomUUID } from "node:crypto";
 
 async function verifyTwilioSignature(
   req: FastifyRequest,
-  requestId?: string,
+  log: any,
 ): Promise<boolean> {
   const twilioAuthToken = process.env.TWILIO_AUTH_TOKEN;
   const signature = req.headers["x-twilio-signature"] as string;
-
-  const requestLogger = requestId ? logger.child({ requestId }) : logger;
 
   if (
     process.env.NODE_ENV !== "production" &&
@@ -25,7 +23,7 @@ async function verifyTwilioSignature(
   }
 
   if (!twilioAuthToken || !signature) {
-    requestLogger.warn({
+    log.warn({
       msg: "Twilio signature or auth token missing",
       hasSignature: !!signature,
       hasToken: !!twilioAuthToken,
@@ -47,7 +45,7 @@ async function verifyTwilioSignature(
   );
 
   if (!isValid) {
-    requestLogger.warn({
+    log.warn({
       msg: "Invalid Twilio signature",
       url,
       eventType: "WEBHOOK_SECURITY_DENIED",
@@ -66,7 +64,7 @@ export async function twilioWebhookHandler(fastify: FastifyInstance) {
       const requestLogger = logger.child({ requestId });
 
       // 1. Validate signature
-      const isValid = await verifyTwilioSignature(request, requestId);
+      const isValid = await verifyTwilioSignature(request, requestLogger);
       if (!isValid) {
         return reply.code(401).send({ error: "Unauthorized" });
       }

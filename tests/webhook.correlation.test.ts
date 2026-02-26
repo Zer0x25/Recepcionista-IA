@@ -2,29 +2,27 @@ import { jest } from "@jest/globals";
 import supertest from "supertest";
 import { fastify } from "../src/server.js";
 import { prisma } from "../src/persistence/prisma.js";
-import { logger } from "../src/observability/logger.js";
 
 describe("Webhook Correlation (ADR-005)", () => {
-  let loggerSpy: any;
+  const logCollector: any[] = [];
 
   beforeAll(async () => {
     process.env.ALLOW_INSECURE_WEBHOOK = "true";
+    (global as any).__TEST_LOG_COLLECTOR__ = logCollector;
     await fastify.ready();
   });
 
   afterAll(async () => {
+    delete (global as any).__TEST_LOG_COLLECTOR__;
     await fastify.close();
     await prisma.$disconnect();
     process.env.ALLOW_INSECURE_WEBHOOK = "false";
   });
 
-  beforeEach(() => {
-    // Mock logger.child which is used to create contextual loggers
-    loggerSpy = jest.spyOn(logger, "child");
-  });
-
-  afterEach(() => {
-    jest.resetAllMocks();
+  beforeEach(async () => {
+    logCollector.length = 0;
+    await prisma.message.deleteMany();
+    await prisma.conversation.deleteMany();
   });
 
   it("should include requestId in all logs and conversationId after upsert", async () => {
@@ -43,30 +41,48 @@ describe("Webhook Correlation (ADR-005)", () => {
 
     expect(response.status).toBe(200);
 
-    // Verify that logger.child was called (creating child loggers)
-    expect(loggerSpy).toHaveBeenCalled();
+    const allLogs = logCollector;
+    expect(allLogs.length).toBeGreaterThan(0);
 
-    // Check calls to the child loggers
-    // Since we mock logger.child, we need to track what it returns
-    // However, a simpler way is to verify that all calls were contextual.
-    // Given the constraints, we'll verify that child loggers were created with the expected keys.
+    // 1. Verify requestId is present in logs that are part of this request flow
+    // We can identify them by checking if they HAVE a requestId (since we want to ensure they DO)
+    // but better: verify that at least some logs have a requestId and it matches across them.
 
-    const childCalls = loggerSpy.mock.calls;
-
-    // At least 3 child loggers should be created:
-    // 1. requestLogger (requestId)
-    // 2. requestLogger (inside verifyTwilioSignature)
-    // 3. contextualLogger (requestId + conversationId)
-    // 4. orchestratorLogger (requestId + conversationId)
-    expect(childCalls.length).toBeGreaterThanOrEqual(3);
-
-    const firstChild = childCalls[0][0];
-    expect(firstChild).toHaveProperty("requestId");
-
-    // Check if any child was created with conversationId
-    const hasConversationId = childCalls.some((call: any) =>
-      call[0].hasOwnProperty("conversationId"),
+    const requestRelatedLogs = allLogs.filter(
+      (l) => l.msg !== "Server started" && l.eventType !== "SERVER_START",
     );
-    expect(hasConversationId).toBe(true);
+
+    expect(requestRelatedLogs.length).toBeGreaterThan(0);
+
+    let capturedRequestId: string | undefined;
+
+    requestRelatedLogs.forEach((log) => {
+      // Internal state transitions and webhook processing MUST have requestId
+      if (
+        [
+          "state_transition",
+          "WEBHOOK_PROCESSED",
+          "WEBHOOK_DUPLICATE_IDEMPOTENCY",
+        ].includes(log.eventType)
+      ) {
+        expect(log).toHaveProperty("requestId");
+        if (!capturedRequestId) {
+          capturedRequestId = log.requestId;
+        } else {
+          expect(log.requestId).toBe(capturedRequestId);
+        }
+      }
+    });
+
+    expect(capturedRequestId).toBeDefined();
+
+    // 2. Verify conversationId exists in logs that occur AFTER the message is persisted
+    const logsWithConversationId = allLogs.filter((l) => l.conversationId);
+
+    expect(logsWithConversationId.length).toBeGreaterThan(0);
+    logsWithConversationId.forEach((log) => {
+      expect(log).toHaveProperty("requestId", capturedRequestId);
+      expect(log).toHaveProperty("conversationId");
+    });
   });
 });
