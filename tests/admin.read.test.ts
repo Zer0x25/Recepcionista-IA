@@ -23,6 +23,7 @@ describe("Admin Read API (Debug)", () => {
     await prisma.message.deleteMany();
     await prisma.conversation.deleteMany();
 
+    capturedLogs.length = 0;
     const { loggerFake, getLogs } = makeTestLogger();
     capturedLogs = getLogs();
 
