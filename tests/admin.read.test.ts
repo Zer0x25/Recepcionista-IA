@@ -5,9 +5,10 @@ import { prisma } from "../src/persistence/prisma.js";
 import { State } from "@prisma/client";
 import { logger } from "../src/observability/logger.js";
 import { makeTestLogger } from "./testUtils.js";
+import { env } from "../src/config/env.js";
 
 describe("Admin Read API (Debug)", () => {
-  const ADMIN_KEY = "test-api-key-123";
+  const ADMIN_KEY = env.ADMIN_API_KEY;
   const fromNumber = "+1234567890";
 
   let capturedLogs: any[] = [];
@@ -15,7 +16,6 @@ describe("Admin Read API (Debug)", () => {
   let loggerFakeInstance: any;
 
   beforeAll(async () => {
-    process.env.ADMIN_API_KEY = ADMIN_KEY;
     await fastify.ready();
 
     const { loggerFake, getLogs } = makeTestLogger();

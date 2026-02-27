@@ -1,12 +1,12 @@
 import { fastify } from "../../src/server.js";
 import { prisma } from "../../src/persistence/prisma.js";
 import { JobStatus } from "@prisma/client";
+import { env } from "../../src/config/env.js";
 
 describe("Admin Metrics Endpoints", () => {
-  const adminKey = "test-api-key-123";
+  const adminKey = env.ADMIN_API_KEY;
 
   beforeAll(async () => {
-    process.env.ADMIN_API_KEY = adminKey;
     await fastify.ready();
   });
 
