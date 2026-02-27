@@ -3,11 +3,9 @@ import { prisma } from "../persistence/prisma.js";
 import { logger } from "../observability/logger.js";
 import { sendWhatsappMessage } from "../channel/twilioSend.js";
 import { calcBackoffMs } from "./backoff.js";
+import { SENDING_COLLISION_BACKOFF_MS, SENDING_TTL_MS } from "./constants.js";
 
 const REPLY_STUB = "Recibido, estoy procesando tu solicitud.";
-
-/** How long (ms) to yield before the SENDING-collision worker retries. */
-const SENDING_COLLISION_BACKOFF_MS = 2_000;
 
 /**
  * Process a single claimed Job row.
@@ -158,9 +156,56 @@ export async function processJob(job: any): Promise<void> {
       }
 
       if (currentPhase === "SENDING") {
-        // Another worker is mid-send right now → yield with short backoff.
+        // Another worker is mid-send. Check if it's stuck via TTL.
+        const payload = current?.payload as Record<string, any>;
+        const lockedAtStr = payload?.sendingLockedAt;
+        const lockedAt = lockedAtStr ? Date.parse(lockedAtStr) : NaN;
+        const now = Date.now();
+        const ageMs = now - lockedAt;
+
+        if (isNaN(lockedAt) || ageMs > SENDING_TTL_MS) {
+          // Stuck or invalid lock -> revert to PREPARED so we can retry safely.
+          await prisma.message.update({
+            where: { providerMessageId: outboundProviderMessageId },
+            data: {
+              payload: {
+                ...payload,
+                phase: "PREPARED",
+                lastSendError: "SENDING_TTL_EXPIRED",
+                ttlExpiredAt: new Date(now).toISOString(),
+                previousSendingLockedAt: lockedAtStr,
+                previousSendingLockedBy: payload?.sendingLockedBy,
+                sendingLockedAt: undefined,
+                sendingLockedBy: undefined,
+              } as Prisma.InputJsonValue,
+            },
+          });
+
+          // Requeue job with normal backoff (no attempts++ because it's a crash recovery).
+          // Using current attempts to calculate backoff.
+          const nextRunAt = new Date(now + calcBackoffMs(job.attempts ?? 0));
+          await prisma.job.update({
+            where: { id: job.id },
+            data: {
+              status: JobStatus.PENDING,
+              nextRunAt,
+              lockedAt: null,
+              lockedBy: null,
+            },
+          });
+
+          jobLogger.warn({
+            eventType: "JOB_SENDING_TTL_EXPIRED",
+            ageMs: isNaN(ageMs) ? null : ageMs,
+            sendingLockedAt: lockedAtStr,
+            nextRunAt: nextRunAt.toISOString(),
+          });
+          return;
+        }
+
+        // Lock is fresh -> yield with short backoff.
         // Do NOT increment attempts — this is a concurrency yield, not a failure.
-        const nextRunAt = new Date(Date.now() + SENDING_COLLISION_BACKOFF_MS);
+        const nextRunAt = new Date(now + SENDING_COLLISION_BACKOFF_MS);
         await prisma.job.update({
           where: { id: job.id },
           data: {
@@ -170,7 +215,7 @@ export async function processJob(job: any): Promise<void> {
             lockedBy: null,
           },
         });
-        const durationMs = Date.now() - startTime;
+        const durationMs = now - startTime;
         jobLogger.warn({
           eventType: "JOB_SEND_COLLISION",
           durationMs,
