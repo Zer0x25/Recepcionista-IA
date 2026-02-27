@@ -7,7 +7,8 @@ describe("Twilio Webhook Outbound Persistence (Audit)", () => {
   beforeAll(async () => {
     await fastify.ready();
     process.env.ALLOW_INSECURE_WEBHOOK = "true";
-    process.env.NODE_ENV = "development"; // to allow business logic to proceed normally if needed
+    process.env.NODE_ENV = "development";
+    await prisma.job.deleteMany();
     await prisma.stateTransition.deleteMany();
     await prisma.message.deleteMany();
     await prisma.conversation.deleteMany();
@@ -20,7 +21,7 @@ describe("Twilio Webhook Outbound Persistence (Audit)", () => {
     process.env.NODE_ENV = "test";
   });
 
-  it("should confirm OUTBOUND message exists after successful processing", async () => {
+  it("should NOT create OUTBOUND message in webhook — async worker handles that now", async () => {
     const from = "+19998887777";
     const payload = {
       MessageSid: "SM_OUTBOUND_AUDIT",
@@ -37,6 +38,7 @@ describe("Twilio Webhook Outbound Persistence (Audit)", () => {
       .set("x-twilio-signature", "audit-signature");
 
     expect(response.status).toBe(200);
+    expect(response.text).toBe("<Response></Response>");
 
     // Check DB
     const conversation = await prisma.conversation.findUnique({
@@ -45,13 +47,24 @@ describe("Twilio Webhook Outbound Persistence (Audit)", () => {
     });
 
     expect(conversation).toBeDefined();
+
+    // Webhook must NOT create OUTBOUND messages — that is the worker's responsibility
     const outbound = conversation?.messages.find(
       (m) => m.direction === "OUTBOUND",
     );
+    expect(outbound).toBeUndefined();
 
-    expect(outbound).toBeDefined();
-    expect(outbound?.providerMessageId).toMatch(/^internal-.*$/);
-    expect(outbound?.content).toContain("Recibido");
-    expect(outbound?.payload).toBeDefined();
+    // Webhook MUST create a Job for the worker to process
+    const job = await prisma.job.findFirst({
+      where: {
+        conversationId: conversation!.id,
+        type: "AI_REPLY_REQUESTED",
+      },
+    });
+    expect(job).toBeDefined();
+    expect(job?.status).toBe("PENDING");
+    expect(job?.idempotencyKey).toBe(
+      `ai-reply:${conversation!.id}:SM_OUTBOUND_AUDIT`,
+    );
   });
 });

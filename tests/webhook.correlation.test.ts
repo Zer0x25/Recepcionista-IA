@@ -20,6 +20,7 @@ describe("Webhook Correlation (ADR-005)", () => {
   });
 
   beforeEach(async () => {
+    await prisma.job.deleteMany();
     await prisma.stateTransition.deleteMany();
     await prisma.message.deleteMany();
     await prisma.conversation.deleteMany();

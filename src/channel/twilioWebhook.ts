@@ -3,10 +3,9 @@ import { prisma } from "../persistence/prisma.js";
 import { logger } from "../observability/logger.js";
 import { TwilioWebhookSchema } from "../validation/twilioSchema.js";
 import { processIncomingMessage } from "../orchestrator/index.js";
-import { State, Prisma } from "@prisma/client";
+import { Prisma } from "@prisma/client";
 
 import twilio from "twilio";
-import { randomUUID } from "node:crypto";
 
 async function verifyTwilioSignature(
   req: FastifyRequest,
@@ -144,7 +143,7 @@ export async function twilioWebhookHandler(fastify: FastifyInstance) {
           conversationId: conversation.id,
         });
 
-        const finalState = await processIncomingMessage(
+        await processIncomingMessage(
           conversation.id,
           providerMessageId,
           requestId,
@@ -154,44 +153,15 @@ export async function twilioWebhookHandler(fastify: FastifyInstance) {
           },
         );
 
-        // 6. Response Construction & Persistence
-        const outboundProviderMessageId = `internal-${randomUUID()}`;
-        let responseContent = "";
-        let twiml = "";
+        // 5. Return fast — AI reply is handled asynchronously by the worker
+        contextualLogger.info({
+          msg: "Inbound message accepted, job enqueued",
+          eventType: "WEBHOOK_PROCESSED",
+          providerMessageId,
+          durationMs: Date.now() - startTime,
+        });
 
-        if (finalState === State.HANDOFF) {
-          contextualLogger.info({
-            msg: "Suppressing automatic response due to HANDOFF state",
-            eventType: "WEBHOOK_PROCESSED",
-            providerMessageId,
-            durationMs: Date.now() - startTime,
-          });
-          twiml = "<Response></Response>";
-        } else {
-          responseContent = `Placeholder: Recibido (Estado: ${finalState})`;
-          twiml = `<Response><Message>${responseContent}</Message></Response>`;
-
-          // Persist OUTBOUND message
-          await prisma.message.create({
-            data: {
-              conversationId: conversation.id,
-              providerMessageId: outboundProviderMessageId,
-              direction: "OUTBOUND",
-              content: responseContent,
-              payload: { twiml } as any,
-            },
-          });
-
-          contextualLogger.info({
-            msg: "Message processed successfully",
-            eventType: "WEBHOOK_PROCESSED",
-            providerMessageId,
-            outboundProviderMessageId,
-            durationMs: Date.now() - startTime,
-          });
-        }
-
-        return reply.code(200).type("text/xml").send(twiml);
+        return reply.code(200).type("text/xml").send("<Response></Response>");
       } catch (error) {
         if (
           error instanceof Prisma.PrismaClientKnownRequestError &&

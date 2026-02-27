@@ -13,6 +13,7 @@ describe("Orchestrator & State Machine", () => {
   });
 
   beforeEach(async () => {
+    await prisma.job.deleteMany();
     await prisma.stateTransition.deleteMany();
     await prisma.message.deleteMany();
     await prisma.conversation.deleteMany();
@@ -39,7 +40,7 @@ describe("Orchestrator & State Machine", () => {
       .set("Content-Type", "application/x-www-form-urlencoded");
 
     expect(response.status).toBe(200);
-    expect(response.text).toContain("Estado: WAITING_USER");
+    expect(response.text).toBe("<Response></Response>");
 
     const conversation = await prisma.conversation.findUnique({
       where: { providerContact: fromNumber },

@@ -5,6 +5,7 @@ export async function setupTestEnv() {
   process.env.ALLOW_INSECURE_WEBHOOK = "true";
   process.env.NODE_ENV = "test";
   await fastify.ready();
+  await prisma.job.deleteMany();
   await prisma.stateTransition.deleteMany();
   await prisma.message.deleteMany();
   await prisma.conversation.deleteMany();

@@ -9,6 +9,7 @@ describe("Twilio Webhook Idempotency", () => {
     process.env.ALLOW_INSECURE_WEBHOOK = "true";
     process.env.NODE_ENV = "development";
     // Clean up DB before tests
+    await prisma.job.deleteMany();
     await prisma.stateTransition.deleteMany();
     await prisma.message.deleteMany();
     await prisma.conversation.deleteMany();
@@ -37,7 +38,7 @@ describe("Twilio Webhook Idempotency", () => {
       .set("Content-Type", "application/x-www-form-urlencoded");
 
     expect(response1.status).toBe(200);
-    expect(response1.text).toContain("Estado: WAITING_USER");
+    expect(response1.text).toBe("<Response></Response>");
 
     // Second request (same providerMessageId)
     const response2 = await supertest(fastify.server)

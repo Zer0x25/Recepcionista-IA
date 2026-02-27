@@ -22,6 +22,7 @@ describe("Webhook Concurrency and Atomicity", () => {
   });
 
   beforeEach(async () => {
+    await prisma.job.deleteMany();
     await prisma.stateTransition.deleteMany();
     await prisma.message.deleteMany();
     await prisma.conversation.deleteMany();

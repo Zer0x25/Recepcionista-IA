@@ -23,6 +23,7 @@ describe("Webhook Logging Sanitization", () => {
 
   beforeEach(async () => {
     originalNodeEnv = process.env.NODE_ENV;
+    await prisma.job.deleteMany();
     await prisma.stateTransition.deleteMany();
     await prisma.message.deleteMany();
     await prisma.conversation.deleteMany();

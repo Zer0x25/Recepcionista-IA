@@ -1,4 +1,4 @@
-import { State } from "@prisma/client";
+import { State, JobType } from "@prisma/client";
 import { prisma } from "../persistence/prisma.js";
 import { logger } from "../observability/logger.js";
 import { isValidTransition } from "./stateMachine.js";
@@ -40,14 +40,15 @@ export async function processIncomingMessage(
     let currentState = initialState;
     let lastMessageContent = conversation.messages[0]?.content;
 
-    // 1. Persist message + Transition to CLASSIFYING (Atomic)
+    // 1. Persist message + Transition to CLASSIFYING + Enqueue Job (Atomic)
     if (inboundMessageData) {
       lastMessageContent = inboundMessageData.content;
       const canTransition = isValidTransition(currentState, State.CLASSIFYING);
       const targetState = canTransition ? State.CLASSIFYING : currentState;
+      const jobIdempotencyKey = `ai-reply:${conversationId}:${providerMessageId}`;
 
-      await prisma.$transaction([
-        prisma.message.create({
+      await prisma.$transaction(async (tx) => {
+        await tx.message.create({
           data: {
             conversationId,
             providerMessageId,
@@ -55,24 +56,36 @@ export async function processIncomingMessage(
             content: inboundMessageData.content,
             payload: inboundMessageData.payload,
           },
-        }),
-        ...(canTransition
-          ? [
-              prisma.conversation.update({
-                where: { id: conversationId },
-                data: { state: targetState },
-              }),
-              prisma.stateTransition.create({
-                data: {
-                  conversationId,
-                  fromState: currentState,
-                  toState: targetState,
-                  triggeredBy: providerMessageId,
-                },
-              }),
-            ]
-          : []),
-      ]);
+        });
+
+        if (canTransition) {
+          await tx.conversation.update({
+            where: { id: conversationId },
+            data: { state: targetState },
+          });
+          await tx.stateTransition.create({
+            data: {
+              conversationId,
+              fromState: currentState,
+              toState: targetState,
+              triggeredBy: providerMessageId,
+            },
+          });
+        }
+
+        // Enqueue AI reply job — skipDuplicates handles idempotent re-delivery
+        await tx.job.createMany({
+          data: [
+            {
+              type: JobType.AI_REPLY_REQUESTED,
+              conversationId,
+              payload: { providerMessageId, reason: "inbound_received" },
+              idempotencyKey: jobIdempotencyKey,
+            },
+          ],
+          skipDuplicates: true,
+        });
+      });
 
       if (canTransition) {
         orchestratorLogger.info({
