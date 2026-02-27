@@ -1,10 +1,4 @@
-import {
-  JobStatus,
-  JobType,
-  Direction,
-  Prisma,
-  OperationalEventType,
-} from "@prisma/client";
+import { JobStatus, JobType, Direction, Prisma, OperationalEventType } from "@prisma/client";
 import { prisma } from "../persistence/prisma.js";
 import { logger } from "../observability/logger.js";
 import { sendWhatsappMessage } from "../channel/twilioSend.js";
@@ -73,9 +67,7 @@ export async function processJob(job: any): Promise<void> {
 
     const lastInbound = conversation.messages[0];
     if (!lastInbound) {
-      throw new Error(
-        `No inbound message found for conversation: ${job.conversationId}`,
-      );
+      throw new Error(`No inbound message found for conversation: ${job.conversationId}`);
     }
 
     const replyContent = REPLY_STUB;
@@ -235,12 +227,6 @@ export async function processJob(job: any): Promise<void> {
             lockedBy: null,
           },
         });
-        const durationMs = now - startTime;
-        jobLogger.warn({
-          currentPhase,
-          nextRunAt: nextRunAt.toISOString(),
-        });
-
         await recordOperationalEvent({
           type: OperationalEventType.CAS_COLLISION,
           jobId: job.id,
@@ -251,9 +237,7 @@ export async function processJob(job: any): Promise<void> {
       }
 
       // Unexpected phase value — surface as an error so the job retries
-      throw new Error(
-        `Unexpected outbound phase after CAS miss: ${currentPhase ?? "null"}`,
-      );
+      throw new Error(`Unexpected outbound phase after CAS miss: ${currentPhase ?? "null"}`);
     }
 
     // ── 4. Send via Twilio ───────────────────────────────────────────────
@@ -272,8 +256,7 @@ export async function processJob(job: any): Promise<void> {
       sid = result.sid;
     } catch (sendError: any) {
       // Twilio failed — revert to PREPARED so the next retry can re-attempt.
-      const errMsg =
-        sendError instanceof Error ? sendError.message : String(sendError);
+      const errMsg = sendError instanceof Error ? sendError.message : String(sendError);
       await prisma.message.update({
         where: { providerMessageId: outboundProviderMessageId },
         data: {

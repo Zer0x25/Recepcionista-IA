@@ -17,10 +17,9 @@ jest.unstable_mockModule("../src/channel/twilioSend.js", () => ({
 
 const { prisma } = await import("../src/persistence/prisma.js");
 const { processJob } = await import("../src/jobs/process.js");
-const { sendWhatsappMessage } =
-  (await import("../src/channel/twilioSend.js")) as {
-    sendWhatsappMessage: jest.Mock<any>;
-  };
+const { sendWhatsappMessage } = (await import("../src/channel/twilioSend.js")) as {
+  sendWhatsappMessage: jest.Mock<any>;
+};
 
 async function cleanDb() {
   await prisma.operationalEvent.deleteMany();
@@ -71,9 +70,7 @@ describe("SENDING TTL expiry", () => {
     });
 
     // 4. Setup Stuck Outbound Message
-    const expiredDate = new Date(
-      Date.now() - (SENDING_TTL_MS + 5_000),
-    ).toISOString();
+    const expiredDate = new Date(Date.now() - (SENDING_TTL_MS + 5_000)).toISOString();
     const outboundProviderMessageId = `job-${job.id}`;
     await prisma.message.create({
       data: {

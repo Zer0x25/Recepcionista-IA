@@ -1,8 +1,5 @@
 import { prisma } from "../../src/persistence/prisma.js";
-import {
-  AggregatorService,
-  floorToMinute,
-} from "../../src/metrics/aggregator.service.js";
+import { AggregatorService, floorToMinute } from "../../src/metrics/aggregator.service.js";
 import { JobStatus } from "@prisma/client";
 
 describe("AggregatorService Hardening", () => {

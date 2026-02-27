@@ -1,4 +1,3 @@
-import { jest } from "@jest/globals";
 import supertest from "supertest";
 import { fastify } from "../src/server.js";
 import { prisma } from "../src/persistence/prisma.js";
@@ -107,9 +106,7 @@ describe("Orchestrator & State Machine", () => {
     expect(states).toContain(State.WAITING_USER);
 
     // Verify ordering
-    const transitionTimes = conversation?.transitions.map((t) =>
-      t.createdAt.getTime(),
-    );
+    const transitionTimes = conversation?.transitions.map((t) => t.createdAt.getTime());
     const sortedTimes = [...(transitionTimes || [])].sort((a, b) => a - b);
     expect(transitionTimes).toEqual(sortedTimes);
   });

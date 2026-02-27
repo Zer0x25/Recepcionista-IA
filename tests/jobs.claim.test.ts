@@ -1,9 +1,3 @@
-/**
- * tests/jobs.claim.test.ts
- *
- * Verifies that claimNextJobs() is concurrency-safe:
- * two workers claiming simultaneously get disjoint sets of jobs.
- */
 import { prisma } from "../src/persistence/prisma.js";
 import { claimNextJobs } from "../src/jobs/claim.js";
 

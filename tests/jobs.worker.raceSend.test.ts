@@ -16,24 +16,8 @@
 
 import { jest } from "@jest/globals";
 
-// ── Deferred helper ──────────────────────────────────────────────────────────
-interface Deferred<T> {
-  promise: Promise<T>;
-  resolve: (value: T) => void;
-  reject: (reason?: any) => void;
-}
-
-function deferred<T>(): Deferred<T> {
-  let resolve!: (value: T) => void;
-  let reject!: (reason?: any) => void;
-  const promise = new Promise<T>((res, rej) => {
-    resolve = res;
-    reject = rej;
-  });
-  return { promise, resolve, reject };
-}
-
 // ── Mock setup ───────────────────────────────────────────────────────────────
+
 const FAKE_SID = "SM_RACE_TEST_456";
 
 // We'll replace the mock implementation per-test using the deferred pattern
@@ -50,10 +34,9 @@ process.env.TWILIO_WHATSAPP_FROM = "whatsapp:+14155238886";
 const { prisma } = await import("../src/persistence/prisma.js");
 const { runWorkerOnce } = await import("../src/worker.js");
 type SendFn = () => Promise<{ sid: string }>;
-const { sendWhatsappMessage } =
-  (await import("../src/channel/twilioSend.js")) as {
-    sendWhatsappMessage: jest.Mock<SendFn>;
-  };
+const { sendWhatsappMessage } = (await import("../src/channel/twilioSend.js")) as {
+  sendWhatsappMessage: jest.Mock<SendFn>;
+};
 
 const PAST = new Date(Date.now() - 60_000);
 
@@ -193,10 +176,7 @@ describe("CAS race: two workers, one job", () => {
     });
     const jobRowB = { ...jobRow, lockedBy: "race-w-B" };
 
-    await Promise.all([
-      processJob({ ...jobRow, lockedBy: "race-w-A" }),
-      processJob(jobRowB),
-    ]);
+    await Promise.all([processJob({ ...jobRow, lockedBy: "race-w-A" }), processJob(jobRowB)]);
 
     // ── Final assertions ───────────────────────────────────────────────────
 

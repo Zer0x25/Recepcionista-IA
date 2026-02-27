@@ -1,10 +1,5 @@
 import { logger } from "../observability/logger.js";
-import {
-  AIInput,
-  AIInputSchema,
-  AIOutputSchema,
-  AIAdapterResponse,
-} from "./types.js";
+import { AIInput, AIInputSchema, AIOutputSchema, AIAdapterResponse } from "./types.js";
 
 /**
  * AI Adapter - Non-authoritative wrapper for AI calls.

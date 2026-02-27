@@ -1,7 +1,9 @@
 # ADR-002
+
 # Conversation State Machine
 
 ## Status
+
 Accepted
 
 ## Context

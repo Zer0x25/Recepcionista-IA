@@ -11,6 +11,6 @@
 ## Folder Convention
 
 prompts/
- ├─ classify_intent_v1.md
- ├─ generate_reply_v1.md
- └─ summarize_v1.md
+├─ classify_intent_v1.md
+├─ generate_reply_v1.md
+└─ summarize_v1.md

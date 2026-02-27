@@ -13,13 +13,10 @@ async function sleep(ms: number): Promise<void> {
 async function main(): Promise<void> {
   logger.info({ msg: "Metrics Aggregator Runner starting" });
 
-  // eslint-disable-next-line no-constant-condition
   while (true) {
     const now = new Date();
     // Calculate ms until next minute boundary
-    const nextMinute = new Date(
-      Math.floor(now.getTime() / 60_000) * 60_000 + 60_000,
-    );
+    const nextMinute = new Date(Math.floor(now.getTime() / 60_000) * 60_000 + 60_000);
     const sleepMs = nextMinute.getTime() - now.getTime();
 
     await sleep(sleepMs);

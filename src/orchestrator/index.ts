@@ -28,7 +28,6 @@ export async function processIncomingMessage(
       throw new Error(`Conversation not found: ${conversationId}`);
     }
 
-    const lastMessage = conversation.messages[0];
     const initialState = conversation.state;
 
     orchestratorLogger.info({
@@ -130,9 +129,7 @@ export async function processIncomingMessage(
         nextState,
         providerMessageId,
         requestId,
-        nextState === State.HANDOFF
-          ? "Handoff triggered by content"
-          : undefined,
+        nextState === State.HANDOFF ? "Handoff triggered by content" : undefined,
       );
     }
 

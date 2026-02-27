@@ -1,10 +1,9 @@
-import { jest } from "@jest/globals";
 import { fastify } from "../../src/server.js";
 import { prisma } from "../../src/persistence/prisma.js";
 import { JobStatus } from "@prisma/client";
 
 describe("Admin Metrics Endpoints", () => {
-  const adminKey = "test-admin-key";
+  const adminKey = "test-api-key-123";
 
   beforeAll(async () => {
     process.env.ADMIN_API_KEY = adminKey;

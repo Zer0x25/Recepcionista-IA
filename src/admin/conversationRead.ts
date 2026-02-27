@@ -4,10 +4,7 @@ import { prisma } from "../persistence/prisma.js";
  * Gets a complete snapshot of a conversation by its ID.
  * Includes the conversation details, the last N messages, and all state transitions.
  */
-export async function getConversationSnapshotById(
-  id: string,
-  limitMessages: number = 50,
-) {
+export async function getConversationSnapshotById(id: string, limitMessages: number = 50) {
   return await prisma.conversation.findUnique({
     where: { id },
     include: {

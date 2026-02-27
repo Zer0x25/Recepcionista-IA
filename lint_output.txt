@@ -1,0 +1,113 @@
+
+> recepcionista-ia@1.0.0 lint
+> eslint "src/**/*.ts" "tests/**/*.ts"
+
+
+C:\Users\Zer0x\Desktop\Proyectos\Recepcionista IA\src\admin\adminRoutes.ts
+   33:26  warning  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+   37:17  warning  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+   51:29  warning  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+   77:29  warning  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+   93:29  warning  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  112:29  warning  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  168:29  warning  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+
+C:\Users\Zer0x\Desktop\Proyectos\Recepcionista IA\src\ai_adapter\adapter.ts
+  48:19  warning  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  74:54  warning  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+
+C:\Users\Zer0x\Desktop\Proyectos\Recepcionista IA\src\channel\twilioSend.ts
+  80:17  warning  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+
+C:\Users\Zer0x\Desktop\Proyectos\Recepcionista IA\src\channel\twilioWebhook.ts
+  10:64  warning  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  33:30  warning  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  37:32  warning  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  57:49  warning  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+
+C:\Users\Zer0x\Desktop\Proyectos\Recepcionista IA\src\jobs\claim.ts
+  18:12  warning  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  21:37  warning  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+
+C:\Users\Zer0x\Desktop\Proyectos\Recepcionista IA\src\jobs\process.ts
+   36:39  warning  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+   96:25  warning  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  135:64  warning  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  166:60  warning  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  257:25  warning  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  308:19  warning  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+
+C:\Users\Zer0x\Desktop\Proyectos\Recepcionista IA\src\metrics\aggregator.runner.ts
+  16:3   warning  Unused eslint-disable directive (no problems were reported from 'no-constant-condition')
+  47:19  warning  Unexpected any. Specify a different type                                                  @typescript-eslint/no-explicit-any
+
+C:\Users\Zer0x\Desktop\Proyectos\Recepcionista IA\src\orchestrator\index.ts
+  11:52  warning  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+
+C:\Users\Zer0x\Desktop\Proyectos\Recepcionista IA\src\server.ts
+  36:35  warning  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  43:30  warning  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+
+C:\Users\Zer0x\Desktop\Proyectos\Recepcionista IA\src\worker.ts
+   87:17  warning  Unexpected any. Specify a different type                                                  @typescript-eslint/no-explicit-any
+  110:3   warning  Unused eslint-disable directive (no problems were reported from 'no-constant-condition')
+  114:19  warning  Unexpected any. Specify a different type                                                  @typescript-eslint/no-explicit-any
+
+C:\Users\Zer0x\Desktop\Proyectos\Recepcionista IA\tests\admin.read.test.ts
+  13:21  warning  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  14:18  warning  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  15:27  warning  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+
+C:\Users\Zer0x\Desktop\Proyectos\Recepcionista IA\tests\admin\adminMetrics.test.ts
+  1:10  error  'jest' is defined but never used  @typescript-eslint/no-unused-vars
+
+C:\Users\Zer0x\Desktop\Proyectos\Recepcionista IA\tests\ai_adapter.contract.test.ts
+   6:21  warning  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  11:57  warning  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  13:27  warning  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  15:58  warning  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  17:27  warning  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  56:10  warning  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+
+C:\Users\Zer0x\Desktop\Proyectos\Recepcionista IA\tests\jobs.claim.test.ts
+   1:10  error    'jest' is defined but never used          @typescript-eslint/no-unused-vars
+  56:35  warning  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  57:35  warning  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+
+C:\Users\Zer0x\Desktop\Proyectos\Recepcionista IA\tests\jobs.worker.raceSend.test.ts
+  118:59  warning  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  190:59  warning  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+
+C:\Users\Zer0x\Desktop\Proyectos\Recepcionista IA\tests\jobs.worker.send.test.ts
+  110:59  warning  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  177:59  warning  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+
+C:\Users\Zer0x\Desktop\Proyectos\Recepcionista IA\tests\jobs.worker.sendingTtl.test.ts
+   14:23  warning  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+   21:34  warning  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+   96:40  warning  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  166:40  warning  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+
+C:\Users\Zer0x\Desktop\Proyectos\Recepcionista IA\tests\testUtils.ts
+  24:19  warning  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  26:38  warning  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  27:27  warning  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  28:19  warning  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  32:19  warning  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  36:20  warning  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  40:20  warning  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  44:27  warning  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+
+C:\Users\Zer0x\Desktop\Proyectos\Recepcionista IA\tests\webhook.correlation.test.ts
+  9:21  warning  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+
+C:\Users\Zer0x\Desktop\Proyectos\Recepcionista IA\tests\webhook.logging.test.ts
+   9:21  warning  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  10:18  warning  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+
+C:\Users\Zer0x\Desktop\Proyectos\Recepcionista IA\tests\worker\heartbeat.test.ts
+  12:72  warning  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+
+Ô£û 63 problems (2 errors, 61 warnings)
+  0 errors and 2 warnings potentially fixable with the `--fix` option.
+

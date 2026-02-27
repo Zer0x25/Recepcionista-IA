@@ -72,9 +72,7 @@ describe("Webhook → Job creation (ADR-006)", () => {
     expect(jobs[0].type).toBe("AI_REPLY_REQUESTED");
     expect(jobs[0].status).toBe("PENDING");
     expect(jobs[0].conversationId).toBe(conversationId);
-    expect(jobs[0].idempotencyKey).toBe(
-      `ai-reply:${conversationId}:${BASE_PAYLOAD.MessageSid}`,
-    );
+    expect(jobs[0].idempotencyKey).toBe(`ai-reply:${conversationId}:${BASE_PAYLOAD.MessageSid}`);
 
     // 4. No OUTBOUND message created by webhook
     const outbound = await prisma.message.findMany({

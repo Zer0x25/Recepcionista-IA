@@ -19,7 +19,7 @@ declare module "fastify" {
   }
 }
 
-fastify.addHook("onRequest", async (request, reply) => {
+fastify.addHook("onRequest", async (request, _reply) => {
   request.requestId = randomUUID();
 });
 

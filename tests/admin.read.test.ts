@@ -7,7 +7,7 @@ import { logger } from "../src/observability/logger.js";
 import { makeTestLogger } from "./testUtils.js";
 
 describe("Admin Read API (Debug)", () => {
-  const ADMIN_KEY = "test-admin-key";
+  const ADMIN_KEY = "test-api-key-123";
   const fromNumber = "+1234567890";
 
   let capturedLogs: any[] = [];
@@ -100,9 +100,7 @@ describe("Admin Read API (Debug)", () => {
         .set("x-admin-key", "wrong-key");
       expect(resp.status).toBe(401);
 
-      const log = capturedLogs.find(
-        (l) => l.eventType === "ADMIN_READ_UNAUTHORIZED",
-      );
+      const log = capturedLogs.find((l) => l.eventType === "ADMIN_READ_UNAUTHORIZED");
       expect(log).toBeDefined();
       expect(log.requestId).toBeDefined();
       expect(log.scope).toBe("admin");
@@ -114,9 +112,7 @@ describe("Admin Read API (Debug)", () => {
         .set("x-admin-key", ADMIN_KEY);
       expect(resp.status).toBe(400);
 
-      const log = capturedLogs.find(
-        (l) => l.eventType === "ADMIN_READ_INVALID_PARAMS",
-      );
+      const log = capturedLogs.find((l) => l.eventType === "ADMIN_READ_INVALID_PARAMS");
       expect(log).toBeDefined();
       expect(log.durationMs).toBeDefined();
     });
@@ -128,9 +124,7 @@ describe("Admin Read API (Debug)", () => {
         .set("x-admin-key", ADMIN_KEY);
       expect(resp.status).toBe(404);
 
-      const log = capturedLogs.find(
-        (l) => l.eventType === "ADMIN_READ_NOT_FOUND",
-      );
+      const log = capturedLogs.find((l) => l.eventType === "ADMIN_READ_NOT_FOUND");
       expect(log).toBeDefined();
       expect(log.conversationId).toBe(id);
       expect(log.durationMs).toBeDefined();
@@ -151,9 +145,7 @@ describe("Admin Read API (Debug)", () => {
       expect(resp.body.messages.length).toBe(2);
       expect(resp.body.transitions.length).toBe(1);
 
-      const log = capturedLogs.find(
-        (l) => l.eventType === "ADMIN_READ_SUCCESS",
-      );
+      const log = capturedLogs.find((l) => l.eventType === "ADMIN_READ_SUCCESS");
       expect(log).toBeDefined();
       expect(log.conversationId).toBe(conversation.id);
       expect(log.durationMs).toBeDefined();
@@ -194,9 +186,7 @@ describe("Admin Read API (Debug)", () => {
     it("should return the conversation snapshot by contact", async () => {
       const conversation = await setupMockData();
       const resp = await supertest(fastify.server)
-        .get(
-          `/admin/conversations/by-contact/${encodeURIComponent(fromNumber)}`,
-        )
+        .get(`/admin/conversations/by-contact/${encodeURIComponent(fromNumber)}`)
         .set("x-admin-key", ADMIN_KEY);
 
       expect(resp.status).toBe(200);
@@ -206,9 +196,7 @@ describe("Admin Read API (Debug)", () => {
     it("should use default limitMessages if not provided", async () => {
       await setupMockData();
       const resp = await supertest(fastify.server)
-        .get(
-          `/admin/conversations/by-contact/${encodeURIComponent(fromNumber)}`,
-        )
+        .get(`/admin/conversations/by-contact/${encodeURIComponent(fromNumber)}`)
         .set("x-admin-key", ADMIN_KEY);
 
       expect(resp.status).toBe(200);

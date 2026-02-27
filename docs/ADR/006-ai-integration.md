@@ -1,7 +1,9 @@
 # ADR-006
+
 # AI Integration Strategy (Outbox Pattern)
 
 ## Status
+
 Accepted
 
 ## Context
@@ -14,6 +16,7 @@ We need to integrate AI into the system without violating:
 - ADR-005 Observability
 
 AI calls introduce:
+
 - Variable latency
 - External dependency risk
 - Timeout unpredictability
@@ -66,6 +69,7 @@ Worker process:
 8. Mark job as DONE
 
 If AI fails:
+
 - Mark job FAILED
 - Retry using deterministic retry policy
 
@@ -98,11 +102,13 @@ All job state transitions must be logged.
 AI:
 
 CAN:
+
 - Suggest intent
 - Generate reply drafts
 - Summarize context
 
 CANNOT:
+
 - Change conversation state
 - Write directly to database
 - Trigger HANDOFF directly
@@ -122,6 +128,7 @@ New event types:
 - AI_JOB_RETRY_SCHEDULED
 
 All must include:
+
 - conversationId
 - jobId
 - durationMs
@@ -153,12 +160,14 @@ Use unique constraints where applicable.
 ## Consequences
 
 Pros:
+
 - Webhook SLA independent from AI SLA
 - Improved scalability
 - Clear separation of concerns
 - Deterministic orchestration preserved
 
 Cons:
+
 - Additional complexity
 - Requires worker lifecycle management
 - Requires monitoring of job backlog

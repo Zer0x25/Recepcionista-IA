@@ -1,4 +1,3 @@
-import { env } from "./config/env.js";
 import { randomUUID } from "crypto";
 import { logger } from "./observability/logger.js";
 import { claimNextJobs } from "./jobs/claim.js";
@@ -108,7 +107,6 @@ async function main(): Promise<void> {
     workerId: GLOBAL_WORKER_ID,
   });
 
-  // eslint-disable-next-line no-constant-condition
   while (true) {
     try {
       await runWorkerOnce();
@@ -127,8 +125,7 @@ function sleep(ms: number): Promise<void> {
 const isEntryPoint =
   typeof process !== "undefined" &&
   process.argv[1] != null &&
-  (process.argv[1].endsWith("worker.js") ||
-    process.argv[1].endsWith("worker.ts"));
+  (process.argv[1].endsWith("worker.js") || process.argv[1].endsWith("worker.ts"));
 
 if (isEntryPoint) {
   main().catch((err) => {

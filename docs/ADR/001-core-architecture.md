@@ -1,7 +1,9 @@
 # ADR-001
+
 # Core Architecture Decision
 
 ## Status
+
 Accepted
 
 ## Context

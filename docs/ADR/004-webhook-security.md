@@ -1,7 +1,9 @@
 # ADR-004
+
 # Webhook Security and Idempotency
 
 ## Status
+
 Accepted
 
 ## Requirements
