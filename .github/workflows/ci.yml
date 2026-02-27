@@ -28,6 +28,7 @@ jobs:
     env:
       DATABASE_URL: "postgresql://postgres:postgres@localhost:5432/recepcionista_db?schema=public"
       ALLOW_INSECURE_WEBHOOK: "true"
+      ADMIN_API_KEY: "ci-test-api-key-12345"
 
     steps:
       - uses: actions/checkout@v4

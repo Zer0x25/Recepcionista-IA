@@ -6,7 +6,10 @@ const envSchema = z.object({
   NODE_ENV: z.enum(["development", "test", "production"]).default("development"),
   DATABASE_URL: z.string().url(),
   PORT: z.coerce.number().int().default(3000),
-  ADMIN_API_KEY: z.string().min(8),
+  ADMIN_API_KEY: z
+    .string()
+    .min(8)
+    .default(process.env.NODE_ENV === "test" ? "test-api-key-default" : ""),
   TWILIO_ACCOUNT_SID: z.string().optional(),
   TWILIO_AUTH_TOKEN: z.string().optional(),
   TWILIO_WHATSAPP_FROM: z.string().optional(),
