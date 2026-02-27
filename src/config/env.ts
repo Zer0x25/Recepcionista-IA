@@ -17,11 +17,10 @@ function validateEnv() {
     if (err instanceof z.ZodError) {
       const missingVars = err.issues.map((i) => i.path.join(".")).join(", ");
       logger.error({
-        msg: "Environment validation failed",
+        eventType: "ENV_VALIDATION_FAILED",
         missingVars,
         errors: err.format(),
       });
-      console.error(`❌ Invalid environment variables: ${missingVars}`);
     } else {
       logger.error({
         msg: "Unknown environment validation error",
