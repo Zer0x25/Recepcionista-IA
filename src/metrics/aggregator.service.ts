@@ -1,5 +1,5 @@
 import { prisma } from "../persistence/prisma.js";
-import { JobStatus } from "@prisma/client";
+import { JobStatus, OperationalEventType } from "@prisma/client";
 import { logger } from "../observability/logger.js";
 
 /**
@@ -26,8 +26,7 @@ export const AggregatorService = {
 
     const startTime = Date.now();
 
-    // Query jobs updated in this window
-    // Uses index on updatedAt (added in Sprint 3.2)
+    // 1. Query jobs updated in this window (for status counts and latency)
     const jobs = await prisma.job.findMany({
       where: {
         updatedAt: {
@@ -42,11 +41,31 @@ export const AggregatorService = {
       },
     });
 
-    if (jobs.length === 0) {
+    // 2. Query operational events in this window
+    const events = await prisma.operationalEvent.groupBy({
+      by: ["type"],
+      where: {
+        createdAt: {
+          gte: windowStart,
+          lt: windowEnd,
+        },
+      },
+      _count: true,
+    });
+
+    if (jobs.length === 0 && events.length === 0) {
       return;
     }
 
-    // Group jobs by status and calculate latency
+    const eventCounts = events.reduce(
+      (acc, e) => {
+        acc[e.type] = e._count;
+        return acc;
+      },
+      {} as Record<OperationalEventType, number>,
+    );
+
+    // 3. Group jobs by status and calculate latency
     const statsByStatus = jobs.reduce(
       (acc, job) => {
         const s = job.status;
@@ -70,13 +89,6 @@ export const AggregatorService = {
           acc[s].latencyCount++;
         }
 
-        if (s === JobStatus.DONE) {
-          acc[s].sendSuccess++;
-        }
-        if (s === JobStatus.FAILED) {
-          acc[s].sendFail++;
-        }
-
         return acc;
       },
       {} as Record<
@@ -93,11 +105,50 @@ export const AggregatorService = {
       >,
     );
 
+    // 4. Distribute operational events into status buckets
+    // Mapping:
+    // - SEND_SUCCESS -> DONE
+    // - SEND_FAIL -> FAILED
+    // - CLAIM_COLLISION + CAS_COLLISION -> PENDING (as they represent retryable friction)
+    // - TTL_EXPIRED -> PENDING (as it reverts to PENDING)
+
+    const ensureStatus = (s: JobStatus) => {
+      if (!statsByStatus[s]) {
+        statsByStatus[s] = {
+          count: 0,
+          sendSuccess: 0,
+          sendFail: 0,
+          collision: 0,
+          ttlExpired: 0,
+          totalLatencyMs: 0,
+          latencyCount: 0,
+        };
+      }
+    };
+
+    if (eventCounts.SEND_SUCCESS) {
+      ensureStatus(JobStatus.DONE);
+      statsByStatus[JobStatus.DONE].sendSuccess = eventCounts.SEND_SUCCESS;
+    }
+    if (eventCounts.SEND_FAIL) {
+      ensureStatus(JobStatus.FAILED);
+      statsByStatus[JobStatus.FAILED].sendFail = eventCounts.SEND_FAIL;
+    }
+
+    const collisions =
+      (eventCounts.CLAIM_COLLISION || 0) + (eventCounts.CAS_COLLISION || 0);
+    if (collisions > 0 || eventCounts.TTL_EXPIRED) {
+      ensureStatus(JobStatus.PENDING);
+      statsByStatus[JobStatus.PENDING].collision = collisions;
+      statsByStatus[JobStatus.PENDING].ttlExpired =
+        eventCounts.TTL_EXPIRED || 0;
+    }
+
     let totalAvgLatency: number | null = null;
     let totalLatencyCount = 0;
     let totalLatencySum = 0;
 
-    // Persist in transaction for atomicity and idempotency
+    // 5. Persist in transaction for atomicity and idempotency
     await prisma.$transaction(async (tx) => {
       for (const [status, stats] of Object.entries(statsByStatus)) {
         const jobStatus = status as JobStatus;
@@ -120,7 +171,15 @@ export const AggregatorService = {
               status: jobStatus,
             },
           },
-          update: {}, // No overwrite if already exists
+          update: {
+            // Overwrite counts if we are re-aggregating the same window
+            count: stats.count,
+            collisionCount: stats.collision,
+            ttlExpiredCount: stats.ttlExpired,
+            sendSuccessCount: stats.sendSuccess,
+            sendFailCount: stats.sendFail,
+            avgProcessingLatencyMs: avgLatency,
+          },
           create: {
             windowStart,
             windowEnd,
@@ -145,6 +204,7 @@ export const AggregatorService = {
       eventType: "METRICS_WINDOW_AGGREGATED",
       windowStart: windowStart.toISOString(),
       jobCount: jobs.length,
+      eventCount: events.length,
       avgLatency: totalAvgLatency,
       durationMs,
     });

@@ -1,9 +1,16 @@
-import { JobStatus, JobType, Direction, Prisma } from "@prisma/client";
+import {
+  JobStatus,
+  JobType,
+  Direction,
+  Prisma,
+  OperationalEventType,
+} from "@prisma/client";
 import { prisma } from "../persistence/prisma.js";
 import { logger } from "../observability/logger.js";
 import { sendWhatsappMessage } from "../channel/twilioSend.js";
 import { calcBackoffMs } from "./backoff.js";
 import { SENDING_COLLISION_BACKOFF_MS, SENDING_TTL_MS } from "./constants.js";
+import { recordOperationalEvent } from "../metrics/events.repository.js";
 
 const REPLY_STUB = "Recibido, estoy procesando tu solicitud.";
 
@@ -150,6 +157,13 @@ export async function processJob(job: any): Promise<void> {
             lastError: null,
           },
         });
+
+        recordOperationalEvent({
+          type: OperationalEventType.SEND_SUCCESS,
+          jobId: job.id,
+          conversationId: job.conversationId,
+        });
+
         const durationMs = Date.now() - startTime;
         jobLogger.info({ eventType: "JOB_PROCESS_SUCCEEDED", durationMs });
         return;
@@ -179,6 +193,12 @@ export async function processJob(job: any): Promise<void> {
                 sendingLockedBy: undefined,
               } as Prisma.InputJsonValue,
             },
+          });
+
+          recordOperationalEvent({
+            type: OperationalEventType.TTL_EXPIRED,
+            jobId: job.id,
+            conversationId: job.conversationId,
           });
 
           // Requeue job with normal backoff (no attempts++ because it's a crash recovery).
@@ -217,11 +237,16 @@ export async function processJob(job: any): Promise<void> {
         });
         const durationMs = now - startTime;
         jobLogger.warn({
-          eventType: "JOB_SEND_COLLISION",
-          durationMs,
           currentPhase,
           nextRunAt: nextRunAt.toISOString(),
         });
+
+        recordOperationalEvent({
+          type: OperationalEventType.CAS_COLLISION,
+          jobId: job.id,
+          conversationId: job.conversationId,
+        });
+
         return;
       }
 
@@ -289,6 +314,12 @@ export async function processJob(job: any): Promise<void> {
       },
     });
 
+    recordOperationalEvent({
+      type: OperationalEventType.SEND_SUCCESS,
+      jobId: job.id,
+      conversationId: job.conversationId,
+    });
+
     const durationMs = Date.now() - startTime;
     jobLogger.info({ eventType: "JOB_PROCESS_SUCCEEDED", durationMs });
   } catch (error: any) {
@@ -309,11 +340,13 @@ export async function processJob(job: any): Promise<void> {
       });
 
       jobLogger.error({
-        eventType: "JOB_PROCESS_FAILED",
-        durationMs,
-        attempts: attemptsNext,
-        nextRunAt: null,
         error: errorMsg,
+      });
+
+      recordOperationalEvent({
+        type: OperationalEventType.SEND_FAIL,
+        jobId: job.id,
+        conversationId: job.conversationId,
       });
     } else {
       const nextRunAt = new Date(Date.now() + calcBackoffMs(attemptsNext));

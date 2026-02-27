@@ -116,17 +116,36 @@ model WorkerHeartbeat {
 }
 
 model JobMetricAggregate {
-  id                String   @id @default(uuid())
-  windowStart       DateTime
-  windowEnd         DateTime
-  status            JobStatus
-  count             Int
-  collisionCount    Int      @default(0)
-  ttlExpiredCount   Int      @default(0)
-  sendSuccessCount  Int      @default(0)
-  sendFailCount     Int      @default(0)
+  id                     String      @id @default(uuid())
+  windowStart            DateTime
+  windowEnd              DateTime
+  status                 JobStatus
+  count                  Int
+  collisionCount         Int         @default(0)
+  ttlExpiredCount        Int         @default(0)
+  sendSuccessCount       Int         @default(0)
+  sendFailCount          Int         @default(0)
   avgProcessingLatencyMs Int?
-  createdAt         DateTime @default(now())
+  createdAt              DateTime    @default(now())
 
   @@unique([windowStart, status])
+}
+
+model OperationalEvent {
+  id             String               @id @default(uuid())
+  type           OperationalEventType
+  jobId          String?
+  conversationId String?
+  createdAt      DateTime             @default(now())
+
+  @@index([type, createdAt])
+  @@index([jobId])
+}
+
+enum OperationalEventType {
+  CLAIM_COLLISION
+  CAS_COLLISION
+  TTL_EXPIRED
+  SEND_SUCCESS
+  SEND_FAIL
 }

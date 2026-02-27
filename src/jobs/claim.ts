@@ -1,6 +1,7 @@
-import { Prisma } from "@prisma/client";
+import { Prisma, OperationalEventType } from "@prisma/client";
 import { prisma } from "../persistence/prisma.js";
 import { logger } from "../observability/logger.js";
+import { recordOperationalEvent } from "../metrics/events.repository.js";
 
 export const LOCK_TTL_MS = 60_000;
 export const DEFAULT_BATCH_SIZE = 10;
@@ -47,6 +48,19 @@ export async function claimNextJobs(
       workerId,
       count: claimed.length,
     });
+  } else {
+    // Check for CLAIM_COLLISION: if no jobs claimed but there are PENDING jobs ready
+    // it means they are all locked by other workers (SKIP LOCKED).
+    const pendingReadyCount = await prisma.job.count({
+      where: {
+        status: "PENDING",
+        nextRunAt: { lte: new Date() },
+      },
+    });
+
+    if (pendingReadyCount > 0) {
+      recordOperationalEvent({ type: OperationalEventType.CLAIM_COLLISION });
+    }
   }
 
   return claimed;
