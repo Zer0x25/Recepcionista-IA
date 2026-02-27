@@ -100,6 +100,8 @@ model Job {
   @@index([lockedAt])
   // Idempotency / deduplication lookup
   @@index([type, conversationId])
+  // Windowed metrics lookup
+  @@index([updatedAt])
 }
 
 model WorkerHeartbeat {
@@ -123,8 +125,8 @@ model JobMetricAggregate {
   ttlExpiredCount   Int      @default(0)
   sendSuccessCount  Int      @default(0)
   sendFailCount     Int      @default(0)
+  avgProcessingLatencyMs Int?
   createdAt         DateTime @default(now())
 
-  @@index([windowStart])
-  @@index([status])
+  @@unique([windowStart, status])
 }

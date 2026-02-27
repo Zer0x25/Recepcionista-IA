@@ -27,7 +27,7 @@ export const AggregatorService = {
     const startTime = Date.now();
 
     // Query jobs updated in this window
-    // We rely on status and updatedAt (even if updatedAt isn't indexed, it's required for windowing)
+    // Uses index on updatedAt (added in Sprint 3.2)
     const jobs = await prisma.job.findMany({
       where: {
         updatedAt: {
@@ -43,32 +43,38 @@ export const AggregatorService = {
     });
 
     if (jobs.length === 0) {
-      // Still create empty aggregates or just skip?
-      // Requirement: "Persist real aggregates". If nothing happened, skip is safer/cleaner.
       return;
     }
 
-    // Group jobs by status
+    // Group jobs by status and calculate latency
     const statsByStatus = jobs.reduce(
       (acc, job) => {
-        if (!acc[job.status]) {
-          acc[job.status] = {
+        const s = job.status;
+        if (!acc[s]) {
+          acc[s] = {
             count: 0,
             sendSuccess: 0,
             sendFail: 0,
-            // collision and ttlExpired are difficult to infer from Job table alone
-            // without specific flags. We initialize at 0.
             collision: 0,
             ttlExpired: 0,
+            totalLatencyMs: 0,
+            latencyCount: 0,
           };
         }
-        acc[job.status].count++;
+        acc[s].count++;
 
-        if (job.status === JobStatus.DONE) {
-          acc[job.status].sendSuccess++;
+        // Latency only for terminal states
+        if (s === JobStatus.DONE || s === JobStatus.FAILED) {
+          const latency = job.updatedAt.getTime() - job.createdAt.getTime();
+          acc[s].totalLatencyMs += latency;
+          acc[s].latencyCount++;
         }
-        if (job.status === JobStatus.FAILED) {
-          acc[job.status].sendFail++;
+
+        if (s === JobStatus.DONE) {
+          acc[s].sendSuccess++;
+        }
+        if (s === JobStatus.FAILED) {
+          acc[s].sendFail++;
         }
 
         return acc;
@@ -81,29 +87,41 @@ export const AggregatorService = {
           sendFail: number;
           collision: number;
           ttlExpired: number;
+          totalLatencyMs: number;
+          latencyCount: number;
         }
       >,
     );
+
+    let totalAvgLatency: number | null = null;
+    let totalLatencyCount = 0;
+    let totalLatencySum = 0;
 
     // Persist in transaction for atomicity and idempotency
     await prisma.$transaction(async (tx) => {
       for (const [status, stats] of Object.entries(statsByStatus)) {
         const jobStatus = status as JobStatus;
 
-        // Idempotency check
-        const existing = await tx.jobMetricAggregate.findFirst({
-          where: {
-            windowStart,
-            status: jobStatus,
-          },
-        });
+        const avgLatency =
+          stats.latencyCount > 0
+            ? Math.round(stats.totalLatencyMs / stats.latencyCount)
+            : null;
 
-        if (existing) {
-          continue;
+        if (avgLatency !== null) {
+          totalLatencySum += stats.totalLatencyMs;
+          totalLatencyCount += stats.latencyCount;
         }
 
-        await tx.jobMetricAggregate.create({
-          data: {
+        // Atomic upsert relying on @@unique([windowStart, status])
+        await tx.jobMetricAggregate.upsert({
+          where: {
+            windowStart_status: {
+              windowStart,
+              status: jobStatus,
+            },
+          },
+          update: {}, // No overwrite if already exists
+          create: {
             windowStart,
             windowEnd,
             status: jobStatus,
@@ -112,16 +130,22 @@ export const AggregatorService = {
             ttlExpiredCount: stats.ttlExpired,
             sendSuccessCount: stats.sendSuccess,
             sendFailCount: stats.sendFail,
+            avgProcessingLatencyMs: avgLatency,
           },
         });
       }
     });
 
+    if (totalLatencyCount > 0) {
+      totalAvgLatency = Math.round(totalLatencySum / totalLatencyCount);
+    }
+
     const durationMs = Date.now() - startTime;
     logger.info({
       eventType: "METRICS_WINDOW_AGGREGATED",
       windowStart: windowStart.toISOString(),
-      jobsCount: jobs.length,
+      jobCount: jobs.length,
+      avgLatency: totalAvgLatency,
       durationMs,
     });
   },

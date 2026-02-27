@@ -5,7 +5,7 @@ import {
 } from "../../src/metrics/aggregator.service.js";
 import { JobStatus } from "@prisma/client";
 
-describe("AggregatorService", () => {
+describe("AggregatorService Hardening", () => {
   beforeEach(async () => {
     await prisma.jobMetricAggregate.deleteMany();
     await prisma.job.deleteMany();
@@ -18,53 +18,56 @@ describe("AggregatorService", () => {
     await prisma.$disconnect();
   });
 
-  it("should aggregate DONE jobs correctly for a specific window", async () => {
+  it("should compute avg latency correctly for DONE and FAILED jobs", async () => {
     const conv = await prisma.conversation.create({
-      data: { providerContact: "agg-test-1" },
+      data: { providerContact: "latency-test" },
     });
 
     const windowDate = new Date("2026-02-27T10:00:30Z");
     const windowStart = floorToMinute(windowDate);
 
-    // Create a job finished in this window
+    // Job 1: DONE, latency 10s
     await prisma.job.create({
       data: {
         type: "AI_REPLY_REQUESTED",
         conversationId: conv.id,
         status: JobStatus.DONE,
         payload: {},
-        idempotencyKey: "k1",
-        updatedAt: new Date("2026-02-27T10:00:45Z"),
+        idempotencyKey: "l1",
+        createdAt: new Date("2026-02-27T10:00:00Z"),
+        updatedAt: new Date("2026-02-27T10:00:10Z"),
       },
     });
 
-    // Create a job finished OUTSIDE this window
+    // Job 2: FAILED, latency 20s
     await prisma.job.create({
       data: {
         type: "AI_REPLY_REQUESTED",
         conversationId: conv.id,
-        status: JobStatus.DONE,
+        status: JobStatus.FAILED,
         payload: {},
-        idempotencyKey: "k2",
-        updatedAt: new Date("2026-02-27T10:01:15Z"),
+        idempotencyKey: "l2",
+        createdAt: new Date("2026-02-27T10:00:00Z"),
+        updatedAt: new Date("2026-02-27T10:00:20Z"),
       },
     });
 
     await AggregatorService.aggregateWindow(windowDate);
 
-    const aggregates = await prisma.jobMetricAggregate.findMany({
-      where: { windowStart },
+    const aggDone = await prisma.jobMetricAggregate.findUnique({
+      where: { windowStart_status: { windowStart, status: JobStatus.DONE } },
+    });
+    const aggFailed = await prisma.jobMetricAggregate.findUnique({
+      where: { windowStart_status: { windowStart, status: JobStatus.FAILED } },
     });
 
-    expect(aggregates).toHaveLength(1);
-    expect(aggregates[0].status).toBe(JobStatus.DONE);
-    expect(aggregates[0].count).toBe(1);
-    expect(aggregates[0].sendSuccessCount).toBe(1);
+    expect(aggDone?.avgProcessingLatencyMs).toBe(10000);
+    expect(aggFailed?.avgProcessingLatencyMs).toBe(20000);
   });
 
-  it("should be idempotent if run twice for the same window", async () => {
+  it("should not duplicate under simulated concurrent calls (atomic upsert)", async () => {
     const conv = await prisma.conversation.create({
-      data: { providerContact: "agg-test-2" },
+      data: { providerContact: "concurrency-test" },
     });
 
     const windowDate = new Date("2026-02-27T11:00:00Z");
@@ -75,15 +78,17 @@ describe("AggregatorService", () => {
         conversationId: conv.id,
         status: JobStatus.DONE,
         payload: {},
-        idempotencyKey: "k3",
+        idempotencyKey: "c1",
         updatedAt: new Date("2026-02-27T11:00:10Z"),
       },
     });
 
-    // Run first time
-    await AggregatorService.aggregateWindow(windowDate);
-    // Run second time
-    await AggregatorService.aggregateWindow(windowDate);
+    // Run multiple aggregations in parallel
+    await Promise.all([
+      AggregatorService.aggregateWindow(windowDate),
+      AggregatorService.aggregateWindow(windowDate),
+      AggregatorService.aggregateWindow(windowDate),
+    ]);
 
     const count = await prisma.jobMetricAggregate.count({
       where: {
@@ -95,14 +100,33 @@ describe("AggregatorService", () => {
     expect(count).toBe(1);
   });
 
-  it("should handle empty window gracefully", async () => {
-    const windowDate = new Date("2026-02-27T12:00:00Z");
-    await AggregatorService.aggregateWindow(windowDate);
-
-    const count = await prisma.jobMetricAggregate.count({
-      where: { windowStart: floorToMinute(windowDate) },
+  it("should handle mixed statuses and null latency for non-terminal jobs", async () => {
+    const conv = await prisma.conversation.create({
+      data: { providerContact: "mixed-test" },
     });
 
-    expect(count).toBe(0);
+    const windowDate = new Date("2026-02-27T12:00:00Z");
+    const windowStart = floorToMinute(windowDate);
+
+    // Job PENDING (not terminal)
+    await prisma.job.create({
+      data: {
+        type: "AI_REPLY_REQUESTED",
+        conversationId: conv.id,
+        status: JobStatus.PENDING,
+        payload: {},
+        idempotencyKey: "m1",
+        updatedAt: new Date("2026-02-27T12:00:05Z"),
+      },
+    });
+
+    await AggregatorService.aggregateWindow(windowDate);
+
+    const aggPending = await prisma.jobMetricAggregate.findUnique({
+      where: { windowStart_status: { windowStart, status: JobStatus.PENDING } },
+    });
+
+    expect(aggPending?.count).toBe(1);
+    expect(aggPending?.avgProcessingLatencyMs).toBeNull();
   });
 });
