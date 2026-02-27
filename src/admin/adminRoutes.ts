@@ -5,6 +5,8 @@ import {
   getConversationSnapshotByContact,
 } from "./conversationRead.js";
 import { logger } from "../observability/logger.js";
+import { MetricsService } from "../metrics/metrics.service.js";
+import { prisma } from "../persistence/prisma.js";
 
 const AdminParamsSchema = z.object({
   id: z.string().uuid(),
@@ -44,6 +46,68 @@ export async function adminRoutes(fastify: FastifyInstance) {
       }
     },
   );
+
+  // GET /admin/metrics/summary
+  fastify.get("/admin/metrics/summary", async (request, reply) => {
+    const start = Date.now();
+    const log = (request as any).adminLog;
+
+    const [backlogSize, collisionRate, ttlExpiryRate, sendSuccessRate] =
+      await Promise.all([
+        MetricsService.getBacklogSize(),
+        MetricsService.getRecentCollisionRate(),
+        MetricsService.getRecentTTlExpiryRate(),
+        MetricsService.getSendSuccessRate(),
+      ]);
+
+    const durationMs = Date.now() - start;
+    log.info({
+      eventType: "ADMIN_METRICS_SUMMARY_SUCCESS",
+      durationMs,
+    });
+
+    return {
+      backlogSize,
+      collisionRate,
+      ttlExpiryRate,
+      sendSuccessRate,
+    };
+  });
+
+  // GET /admin/jobs/backlog
+  fastify.get("/admin/jobs/backlog", async (request, reply) => {
+    const start = Date.now();
+    const log = (request as any).adminLog;
+
+    const countsByStatus = await MetricsService.getJobsByStatus();
+
+    const durationMs = Date.now() - start;
+    log.info({
+      eventType: "ADMIN_JOBS_BACKLOG_SUCCESS",
+      durationMs,
+    });
+
+    return countsByStatus;
+  });
+
+  // GET /admin/worker/heartbeat
+  fastify.get("/admin/worker/heartbeat", async (request, reply) => {
+    const start = Date.now();
+    const log = (request as any).adminLog;
+
+    const heartbeats = await prisma.workerHeartbeat.findMany({
+      orderBy: { lastSeenAt: "desc" },
+      take: 50,
+    });
+
+    const durationMs = Date.now() - start;
+    log.info({
+      eventType: "ADMIN_WORKER_HEARTBEAT_SUCCESS",
+      durationMs,
+    });
+
+    return heartbeats;
+  });
 
   // GET /admin/conversations/:id
   fastify.get("/admin/conversations/:id", async (request, reply) => {

@@ -2,10 +2,25 @@ import { randomUUID } from "crypto";
 import { logger } from "./observability/logger.js";
 import { claimNextJobs } from "./jobs/claim.js";
 import { processJob } from "./jobs/process.js";
+import { prisma } from "./persistence/prisma.js";
 
 export interface WorkerOptions {
   batchSize?: number;
   workerId?: string;
+}
+
+const GLOBAL_WORKER_ID = `worker-${randomUUID()}`;
+let globalClaimedCountCountSinceLastHeartbeat = 0;
+let lastHeartbeatTime = 0;
+
+const HEARTBEAT_INTERVAL_MS = 15_000;
+
+/**
+ * Reset heartbeat state for testing.
+ */
+export function resetHeartbeatState(): void {
+  globalClaimedCountCountSinceLastHeartbeat = 0;
+  lastHeartbeatTime = 0;
 }
 
 /**
@@ -14,7 +29,7 @@ export interface WorkerOptions {
  * Does NOT import from server.ts; safe to run standalone.
  */
 export async function runWorkerOnce(opts: WorkerOptions = {}): Promise<void> {
-  const workerId = opts.workerId ?? `worker-${randomUUID()}`;
+  const workerId = opts.workerId ?? GLOBAL_WORKER_ID;
   const batchSize = opts.batchSize ?? 10;
 
   const workerLogger = logger.child({ workerId });
@@ -22,13 +37,61 @@ export async function runWorkerOnce(opts: WorkerOptions = {}): Promise<void> {
   const jobs = await claimNextJobs(workerId, batchSize);
 
   if (jobs.length === 0) {
+    // Even if no jobs, try to heartbeat if it's time
+    await performHeartbeat(workerId);
     return;
   }
+
+  globalClaimedCountCountSinceLastHeartbeat += jobs.length;
 
   workerLogger.info({ eventType: "JOB_CLAIMED", count: jobs.length, workerId });
 
   for (const job of jobs) {
     await processJob(job);
+  }
+
+  // Check heartbeat after processing a batch
+  await performHeartbeat(workerId);
+}
+
+async function performHeartbeat(workerId: string): Promise<void> {
+  const now = Date.now();
+  if (now - lastHeartbeatTime < HEARTBEAT_INTERVAL_MS) {
+    return;
+  }
+
+  const claimedToReport = globalClaimedCountCountSinceLastHeartbeat;
+  // Reset before async call to avoid double counting if multiple heartbeats trigger (unlikely here but safe)
+  globalClaimedCountCountSinceLastHeartbeat = 0;
+  lastHeartbeatTime = now;
+
+  try {
+    await prisma.workerHeartbeat.upsert({
+      where: { workerId },
+      update: {
+        lastSeenAt: new Date(),
+        claimedCount: { increment: claimedToReport },
+      },
+      create: {
+        workerId,
+        lastSeenAt: new Date(),
+        claimedCount: claimedToReport,
+      },
+    });
+
+    logger.info({
+      eventType: "WORKER_HEARTBEAT",
+      workerId,
+      claimedDelta: claimedToReport,
+    });
+  } catch (err: any) {
+    // If it fails, add back the claimed count so we don't lose it
+    globalClaimedCountCountSinceLastHeartbeat += claimedToReport;
+    logger.error({
+      eventType: "WORKER_HEARTBEAT_ERROR",
+      workerId,
+      error: err?.message,
+    });
   }
 }
 
@@ -38,7 +101,11 @@ export async function runWorkerOnce(opts: WorkerOptions = {}): Promise<void> {
  */
 async function main(): Promise<void> {
   const intervalMs = 5_000;
-  logger.info({ msg: "Worker starting", intervalMs });
+  logger.info({
+    msg: "Worker starting",
+    intervalMs,
+    workerId: GLOBAL_WORKER_ID,
+  });
 
   // eslint-disable-next-line no-constant-condition
   while (true) {
@@ -59,7 +126,8 @@ function sleep(ms: number): Promise<void> {
 const isEntryPoint =
   typeof process !== "undefined" &&
   process.argv[1] != null &&
-  process.argv[1].endsWith("worker.js");
+  (process.argv[1].endsWith("worker.js") ||
+    process.argv[1].endsWith("worker.ts"));
 
 if (isEntryPoint) {
   main().catch((err) => {

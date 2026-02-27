@@ -101,3 +101,30 @@ model Job {
   // Idempotency / deduplication lookup
   @@index([type, conversationId])
 }
+
+model WorkerHeartbeat {
+  id           String   @id @default(uuid())
+  workerId     String   @unique
+  lastSeenAt   DateTime
+  claimedCount Int      @default(0)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@index([workerId])
+}
+
+model JobMetricAggregate {
+  id                String   @id @default(uuid())
+  windowStart       DateTime
+  windowEnd         DateTime
+  status            JobStatus
+  count             Int
+  collisionCount    Int      @default(0)
+  ttlExpiredCount   Int      @default(0)
+  sendSuccessCount  Int      @default(0)
+  sendFailCount     Int      @default(0)
+  createdAt         DateTime @default(now())
+
+  @@index([windowStart])
+  @@index([status])
+}
