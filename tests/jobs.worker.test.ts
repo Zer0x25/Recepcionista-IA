@@ -5,9 +5,27 @@
  * - Verifies job transitions PENDING → DONE
  * - Verifies exactly 1 OUTBOUND message created with idempotent providerMessageId
  * - Verifies second run creates no additional OUTBOUND message (idempotency)
+ *
+ * sendWhatsappMessage is mocked — this test focuses on DB/job state, not Twilio.
+ * Full Twilio integration is covered in tests/jobs.worker.send.test.ts.
  */
-import { prisma } from "../src/persistence/prisma.js";
-import { runWorkerOnce } from "../src/worker.js";
+
+import { jest } from "@jest/globals";
+
+// Mock Twilio send before any other import
+jest.unstable_mockModule("../src/channel/twilioSend.js", () => ({
+  sendWhatsappMessage: jest
+    .fn<() => Promise<{ sid: string }>>()
+    .mockResolvedValue({ sid: "SM_WORKER_TEST_STUB" }),
+}));
+
+// Set env vars before modules load
+process.env.TWILIO_ACCOUNT_SID = "ACfake";
+process.env.TWILIO_AUTH_TOKEN = "fake_token";
+process.env.TWILIO_WHATSAPP_FROM = "whatsapp:+14155238886";
+
+const { prisma } = await import("../src/persistence/prisma.js");
+const { runWorkerOnce } = await import("../src/worker.js");
 
 const PAST = new Date(Date.now() - 60_000);
 

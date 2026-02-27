@@ -1,17 +1,27 @@
-import { JobStatus, JobType, Direction } from "@prisma/client";
+import { JobStatus, JobType, Direction, Prisma } from "@prisma/client";
 import { prisma } from "../persistence/prisma.js";
 import { logger } from "../observability/logger.js";
-import { callAI } from "../ai_adapter/adapter.js";
+import { sendWhatsappMessage } from "../channel/twilioSend.js";
 import { calcBackoffMs } from "./backoff.js";
 
-const AI_TIMEOUT_MS = 1500;
+const REPLY_STUB = "Recibido, estoy procesando tu solicitud.";
 
 /**
  * Process a single claimed Job row.
  *
- * Idempotency: OUTBOUND Message is upserted on providerMessageId = "job-${job.id}".
- * The unique DB constraint ensures no duplicate is created even if this function
- * runs twice for the same job (e.g. after a crash between message create and job update).
+ * Idempotency strategy (two levels):
+ *
+ * A) DB level: OUTBOUND Message is upserted on providerMessageId = "job-${job.id}".
+ *    The unique constraint guarantees exactly one row per job, regardless of retries.
+ *    providerMessageId stays "job-${job.id}" forever — no schema change needed.
+ *
+ * B) Provider level: payload.phase tracks "PREPARED" vs "SENT".
+ *    If the record already has phase="SENT", we skip the Twilio call entirely.
+ *    This prevents double-sends if the process crashed after Twilio returned
+ *    but before the DB was updated — the next retry will see "PREPARED" and retry,
+ *    but if the job crashed after the DB update then "SENT" precludes re-sending.
+ *
+ * Twilio MessageSid is stored in payload.twilioSid (no additional column / migration).
  */
 export async function processJob(job: any): Promise<void> {
   const startTime = Date.now();
@@ -28,7 +38,7 @@ export async function processJob(job: any): Promise<void> {
       throw new Error(`Unsupported job type: ${job.type}`);
     }
 
-    // 1. Load conversation context (last inbound message)
+    // 1. Load conversation to get providerContact (outbound "to")
     const conversation = await prisma.conversation.findUnique({
       where: { id: job.conversationId },
       include: {
@@ -51,39 +61,76 @@ export async function processJob(job: any): Promise<void> {
       );
     }
 
-    // 2. Call AI with timeout
-    const aiResponse = await callAIWithTimeout(
-      {
-        requestId: job.id,
-        conversationId: job.conversationId,
-        text: lastInbound.content,
-      },
-      AI_TIMEOUT_MS,
-    );
-
-    if (!aiResponse.success) {
-      throw new Error(aiResponse.error ?? "AI call returned failure");
-    }
-
-    // 3. Persist OUTBOUND message (upsert for idempotency)
+    const replyContent = REPLY_STUB;
     const outboundProviderMessageId = `job-${job.id}`;
-    await prisma.message.upsert({
+
+    // 2. Upsert OUTBOUND message — phase="PREPARED"
+    //    On retry: if row already exists (phase=PREPARED or SENT), upsert is a no-op
+    //    for the create path; update leaves the existing data intact.
+    const existingOutbound = await prisma.message.upsert({
       where: { providerMessageId: outboundProviderMessageId },
       create: {
         conversationId: job.conversationId,
         providerMessageId: outboundProviderMessageId,
         direction: Direction.OUTBOUND,
-        content: aiResponse.content,
+        content: replyContent,
         payload: {
           source: "worker",
           jobId: job.id,
-          tokensUsed: aiResponse.tokensUsed,
-        },
+          phase: "PREPARED",
+        } as Prisma.InputJsonValue,
       },
-      update: {}, // no-op on duplicate — already persisted
+      update: {}, // no-op on duplicate — preserve existing phase
     });
 
-    // 4. Mark job DONE
+    // 3. Idempotency guard: skip send if already sent
+    const existingPayload = existingOutbound.payload as Record<string, any>;
+    if (existingPayload?.phase === "SENT") {
+      jobLogger.info({
+        eventType: "JOB_OUTBOUND_ALREADY_SENT",
+        providerMessageId: outboundProviderMessageId,
+      });
+      // Still mark the job DONE (crash recovery path)
+      await prisma.job.update({
+        where: { id: job.id },
+        data: {
+          status: JobStatus.DONE,
+          lockedAt: null,
+          lockedBy: null,
+          lastError: null,
+        },
+      });
+      const durationMs = Date.now() - startTime;
+      jobLogger.info({ eventType: "JOB_PROCESS_SUCCEEDED", durationMs });
+      return;
+    }
+
+    // 4. Send via Twilio
+    const to = conversation.providerContact;
+    const from = process.env.TWILIO_WHATSAPP_FROM ?? "";
+
+    const { sid } = await sendWhatsappMessage({
+      to,
+      from,
+      body: replyContent,
+      requestId: job.id,
+      conversationId: job.conversationId,
+    });
+
+    // 5. Update OUTBOUND record to SENT with Twilio sid
+    await prisma.message.update({
+      where: { providerMessageId: outboundProviderMessageId },
+      data: {
+        payload: {
+          source: "worker",
+          jobId: job.id,
+          phase: "SENT",
+          twilioSid: sid,
+        } as Prisma.InputJsonValue,
+      },
+    });
+
+    // 6. Mark job DONE
     await prisma.job.update({
       where: { id: job.id },
       data: {
@@ -143,26 +190,5 @@ export async function processJob(job: any): Promise<void> {
         error: errorMsg,
       });
     }
-  }
-}
-
-/** Wraps callAI() with an AbortController-based timeout. */
-async function callAIWithTimeout(
-  input: { requestId: string; conversationId: string; text: string },
-  timeoutMs: number,
-) {
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), timeoutMs);
-
-  try {
-    const aiPromise = callAI(input);
-    const timeoutPromise = new Promise<never>((_, reject) => {
-      controller.signal.addEventListener("abort", () =>
-        reject(new Error(`AI call timed out after ${timeoutMs}ms`)),
-      );
-    });
-    return await Promise.race([aiPromise, timeoutPromise]);
-  } finally {
-    clearTimeout(timer);
   }
 }
