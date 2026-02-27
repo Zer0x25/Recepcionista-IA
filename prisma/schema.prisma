@@ -15,6 +15,7 @@ model Conversation {
   updatedAt       DateTime          @updatedAt
   messages        Message[]
   transitions     StateTransition[]
+  jobs            Job[]
 
   // Index for future metrics and filtering by conversation state
   @@index([state])
@@ -37,7 +38,7 @@ model StateTransition {
   triggeredBy    String
   createdAt      DateTime @default(now())
 
-  conversation   Conversation @relation(fields: [conversationId], references: [id])
+  conversation Conversation @relation(fields: [conversationId], references: [id])
 }
 
 model Message {
@@ -47,7 +48,7 @@ model Message {
   providerMessageId String       @unique
   direction         Direction
   content           String
-  payload           Json?        // store full provider payload
+  payload           Json? // store full provider payload
   createdAt         DateTime     @default(now())
 
   @@index([conversationId])
@@ -56,4 +57,47 @@ model Message {
 enum Direction {
   INBOUND
   OUTBOUND
+}
+
+// ---------------------------------------------------------------------------
+// Outbox / Job model (ADR-006)
+// ---------------------------------------------------------------------------
+
+enum JobStatus {
+  PENDING
+  PROCESSING
+  DONE
+  FAILED
+}
+
+enum JobType {
+  AI_REPLY_REQUESTED
+}
+
+model Job {
+  id             String    @id @default(uuid())
+  type           JobType
+  conversationId String
+  payload        Json
+  status         JobStatus @default(PENDING)
+  attempts       Int       @default(0)
+  maxAttempts    Int       @default(5)
+  nextRunAt      DateTime  @default(now())
+  lockedAt       DateTime?
+  lockedBy       String?
+  lastError      String?
+  idempotencyKey String    @unique
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  conversation Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+
+  // Worker claim index
+  @@index([status, nextRunAt])
+  // Conversation history index
+  @@index([conversationId, createdAt])
+  // Lock cleanup index
+  @@index([lockedAt])
+  // Idempotency / deduplication lookup
+  @@index([type, conversationId])
 }
