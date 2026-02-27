@@ -63,11 +63,33 @@ export async function twilioWebhookHandler(fastify: FastifyInstance) {
       const { requestId } = request;
       const requestLogger = logger.child({ requestId });
 
+      const body = request.body as Record<string, any>;
+      const safeFields = {
+        providerMessageId: body.MessageSid,
+        hasFrom: !!body.From,
+        fromLast4: body.From ? String(body.From).slice(-4) : undefined,
+        bodyLength: body.Body ? String(body.Body).length : 0,
+        numMedia: Number(body.NumMedia) || 0,
+        hasSignatureHeader: !!request.headers["x-twilio-signature"],
+        path: request.url,
+      };
+
       requestLogger.info({
         msg: "Webhook received",
         eventType: "WEBHOOK_RECEIVED",
-        payload: request.body,
+        ...safeFields,
       });
+
+      if (
+        process.env.NODE_ENV !== "production" &&
+        process.env.LOG_WEBHOOK_PAYLOAD === "true"
+      ) {
+        requestLogger.debug({
+          msg: "Full webhook payload for debug",
+          eventType: "WEBHOOK_PAYLOAD_DEBUG",
+          payload: request.body,
+        });
+      }
 
       // 1. Validate signature
       const isValid = await verifyTwilioSignature(request, requestLogger);
