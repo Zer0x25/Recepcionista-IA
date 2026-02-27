@@ -8,6 +8,7 @@ import { makeTestLogger } from "./testUtils.js";
 describe("Webhook Logging Sanitization", () => {
   let capturedLogs: any[] = [];
   let loggerSpy: any;
+  let originalNodeEnv: string | undefined;
 
   beforeAll(async () => {
     process.env.ALLOW_INSECURE_WEBHOOK = "true";
@@ -21,6 +22,7 @@ describe("Webhook Logging Sanitization", () => {
   });
 
   beforeEach(async () => {
+    originalNodeEnv = process.env.NODE_ENV;
     await prisma.stateTransition.deleteMany();
     await prisma.message.deleteMany();
     await prisma.conversation.deleteMany();
@@ -35,6 +37,7 @@ describe("Webhook Logging Sanitization", () => {
 
   afterEach(() => {
     loggerSpy.mockRestore();
+    process.env.NODE_ENV = originalNodeEnv;
     delete process.env.LOG_WEBHOOK_PAYLOAD;
   });
 
@@ -94,8 +97,5 @@ describe("Webhook Logging Sanitization", () => {
     expect(debugLog).toBeDefined();
     expect(debugLog.payload).toBeDefined();
     expect(debugLog.payload.MessageSid).toBe("SM_DEBUG_TEST");
-
-    // Cleanup env
-    process.env.NODE_ENV = "test";
   });
 });
