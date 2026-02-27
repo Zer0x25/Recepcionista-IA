@@ -5,15 +5,16 @@ import { prisma } from "../src/persistence/prisma.js";
 describe("Twilio Webhook Rate Limiting (Audit)", () => {
   beforeAll(async () => {
     await fastify.ready();
-    // Bypass security for rate limit tests
     process.env.ALLOW_INSECURE_WEBHOOK = "true";
     process.env.NODE_ENV = "test";
+    process.env.RATE_LIMIT_MAX = "20";
   });
 
   afterAll(async () => {
     await fastify.close();
     await prisma.$disconnect();
     process.env.ALLOW_INSECURE_WEBHOOK = "false";
+    delete process.env.RATE_LIMIT_MAX;
   });
 
   it("should rate limit by 'From' field", async () => {
@@ -26,7 +27,7 @@ describe("Twilio Webhook Rate Limiting (Audit)", () => {
       AccountSid: "AC_TEST",
     };
 
-    // max: 20 in test environment
+    // max: 20 in test environment for this test block
     for (let i = 0; i < 20; i++) {
       const resp = await supertest(fastify.server)
         .post("/webhooks/twilio")

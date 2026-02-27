@@ -28,7 +28,12 @@ import rateLimit from "@fastify/rate-limit";
 // Register plugins
 await fastify.register(formBody);
 await fastify.register(rateLimit, {
-  max: env.NODE_ENV === "test" ? 20 : 100,
+  max: () =>
+    process.env.RATE_LIMIT_MAX
+      ? parseInt(process.env.RATE_LIMIT_MAX, 10)
+      : env.NODE_ENV === "test"
+        ? 1000
+        : 100,
   timeWindow: "1 minute",
   hook: "preValidation",
   keyGenerator: (request) => {

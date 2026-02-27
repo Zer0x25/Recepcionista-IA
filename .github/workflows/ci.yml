@@ -7,9 +7,24 @@ on:
     branches: [main]
 
 jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+      - name: Install dependencies
+        run: npm ci
+      - name: Run linting
+        run: npm run lint
+      - name: Check formatting
+        run: npx prettier --check .
+
   test:
     runs-on: ubuntu-latest
-
     services:
       postgres:
         image: postgres:16
@@ -24,32 +39,22 @@ jobs:
           --health-interval 10s
           --health-timeout 5s
           --health-retries 5
-
     env:
       DATABASE_URL: "postgresql://postgres:postgres@localhost:5432/recepcionista_db?schema=public"
       ALLOW_INSECURE_WEBHOOK: "true"
       ADMIN_API_KEY: "ci-test-api-key-12345"
-
     steps:
       - uses: actions/checkout@v4
-
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
           node-version: "20"
           cache: "npm"
-
       - name: Install dependencies
         run: npm ci
-
-      - name: Run linting
-        run: npm run lint
-
       - name: Generate Prisma Client
         run: npx prisma generate
-
       - name: Run Prisma Migrations
         run: npx prisma migrate deploy
-
       - name: Run tests
         run: npm test -- --runInBand

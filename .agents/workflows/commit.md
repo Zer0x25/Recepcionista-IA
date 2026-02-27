@@ -18,12 +18,12 @@ This workflow automates the process of committing and pushing changes while ensu
    // turbo
    `git add .`
 
-4. **Commit Message**: Request a conventional commit message from the user.
+4. **Commit Message**: Automatically generate a conventional commit message based on the recent changes (you can figure this out from your context or using `git diff --cached`).
    (Format: type(scope): description)
 
 5. **Commit and Push**:
    // turbo
-   `git commit -m "[User's Message]"`
+   `git commit -m "[Generated Message]"`
    // turbo
    `git push origin [current branch]`
 
