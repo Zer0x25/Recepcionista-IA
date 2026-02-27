@@ -34,6 +34,10 @@ export function makeTestLogger() {
         const payload = typeof obj === "string" ? { msg: obj } : obj;
         allCalls.push({ ...context, ...payload, level: "error" });
       },
+      debug: (obj: any) => {
+        const payload = typeof obj === "string" ? { msg: obj } : obj;
+        allCalls.push({ ...context, ...payload, level: "debug" });
+      },
       child: (newContext: any) => {
         return createFakeLogger({ ...context, ...newContext });
       },

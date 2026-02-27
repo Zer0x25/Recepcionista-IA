@@ -7,6 +7,7 @@ import { makeTestLogger } from "./testUtils.js";
 
 describe("Webhook Logging Sanitization", () => {
   let capturedLogs: any[] = [];
+  let loggerSpy: any;
 
   beforeAll(async () => {
     process.env.ALLOW_INSECURE_WEBHOOK = "true";
@@ -27,13 +28,13 @@ describe("Webhook Logging Sanitization", () => {
     const { loggerFake, getLogs } = makeTestLogger();
     capturedLogs = getLogs();
 
-    jest.spyOn(logger, "child").mockImplementation((context) => {
+    loggerSpy = jest.spyOn(logger, "child").mockImplementation((context) => {
       return loggerFake.child(context);
     });
   });
 
   afterEach(() => {
-    jest.restoreAllMocks();
+    loggerSpy.mockRestore();
     delete process.env.LOG_WEBHOOK_PAYLOAD;
   });
 
@@ -82,29 +83,12 @@ describe("Webhook Logging Sanitization", () => {
       AccountSid: "AC_TEST",
     };
 
-    // Need to mock debug specifically as makeTestLogger doesn't have it (wait, let me check)
-    // Looking at testUtils.ts, it only has info, warn, error. I should update it or mock locally.
-    const { loggerFake, getLogs } = makeTestLogger();
-    (loggerFake as any).debug = (obj: any) => {
-      const p = typeof obj === "string" ? { msg: obj } : obj;
-      getLogs().push({ ...p, level: "debug" });
-    };
-
-    jest.spyOn(logger, "child").mockImplementation((context) => {
-      const child = loggerFake.child(context);
-      (child as any).debug = (obj: any) => {
-        const p = typeof obj === "string" ? { msg: obj } : obj;
-        getLogs().push({ ...context, ...p, level: "debug" });
-      };
-      return child;
-    });
-
     await supertest(fastify.server)
       .post("/webhooks/twilio")
       .send(new URLSearchParams(payload).toString())
       .set("Content-Type", "application/x-www-form-urlencoded");
 
-    const debugLog = getLogs().find(
+    const debugLog = capturedLogs.find(
       (l) => l.eventType === "WEBHOOK_PAYLOAD_DEBUG",
     );
     expect(debugLog).toBeDefined();
