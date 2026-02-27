@@ -11,6 +11,7 @@ describe("Admin Read API (Debug)", () => {
   const fromNumber = "+1234567890";
 
   let capturedLogs: any[] = [];
+  let loggerSpy: any;
 
   beforeAll(async () => {
     process.env.ADMIN_API_KEY = ADMIN_KEY;
@@ -24,13 +25,16 @@ describe("Admin Read API (Debug)", () => {
 
     const { loggerFake, getLogs } = makeTestLogger();
     capturedLogs = getLogs();
-    jest.spyOn(logger, "child").mockImplementation((context) => {
+
+    loggerSpy = jest.spyOn(logger, "child").mockImplementation((context) => {
       return loggerFake.child(context);
     });
   });
 
   afterEach(() => {
-    jest.restoreAllMocks();
+    if (loggerSpy) {
+      loggerSpy.mockRestore();
+    }
   });
 
   afterAll(async () => {
