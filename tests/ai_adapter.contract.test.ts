@@ -1,6 +1,6 @@
 import { jest } from "@jest/globals";
-import { logger } from "../src/observability/logger";
-import { callAI } from "../src/ai_adapter";
+import { logger } from "../src/observability/logger.js";
+import { callAI } from "../src/ai_adapter/index.js";
 import { z } from "zod";
 
 describe("AI Adapter Contract Tests", () => {
