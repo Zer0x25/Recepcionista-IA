@@ -59,7 +59,9 @@ export async function claimNextJobs(
     });
 
     if (pendingReadyCount > 0) {
-      recordOperationalEvent({ type: OperationalEventType.CLAIM_COLLISION });
+      await recordOperationalEvent({
+        type: OperationalEventType.CLAIM_COLLISION,
+      });
     }
   }
 

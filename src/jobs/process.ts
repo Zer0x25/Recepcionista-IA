@@ -158,7 +158,7 @@ export async function processJob(job: any): Promise<void> {
           },
         });
 
-        recordOperationalEvent({
+        await recordOperationalEvent({
           type: OperationalEventType.SEND_SUCCESS,
           jobId: job.id,
           conversationId: job.conversationId,
@@ -195,7 +195,7 @@ export async function processJob(job: any): Promise<void> {
             },
           });
 
-          recordOperationalEvent({
+          await recordOperationalEvent({
             type: OperationalEventType.TTL_EXPIRED,
             jobId: job.id,
             conversationId: job.conversationId,
@@ -241,7 +241,7 @@ export async function processJob(job: any): Promise<void> {
           nextRunAt: nextRunAt.toISOString(),
         });
 
-        recordOperationalEvent({
+        await recordOperationalEvent({
           type: OperationalEventType.CAS_COLLISION,
           jobId: job.id,
           conversationId: job.conversationId,
@@ -343,7 +343,7 @@ export async function processJob(job: any): Promise<void> {
         error: errorMsg,
       });
 
-      recordOperationalEvent({
+      await recordOperationalEvent({
         type: OperationalEventType.SEND_FAIL,
         jobId: job.id,
         conversationId: job.conversationId,

@@ -23,6 +23,8 @@ const { sendWhatsappMessage } =
   };
 
 async function cleanDb() {
+  await prisma.operationalEvent.deleteMany();
+  await prisma.jobMetricAggregate.deleteMany();
   await prisma.job.deleteMany();
   await prisma.message.deleteMany();
   await prisma.conversation.deleteMany();
