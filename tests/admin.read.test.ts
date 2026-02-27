@@ -12,10 +12,15 @@ describe("Admin Read API (Debug)", () => {
 
   let capturedLogs: any[] = [];
   let loggerSpy: any;
+  let loggerFakeInstance: any;
 
   beforeAll(async () => {
     process.env.ADMIN_API_KEY = ADMIN_KEY;
     await fastify.ready();
+
+    const { loggerFake, getLogs } = makeTestLogger();
+    loggerFakeInstance = loggerFake;
+    capturedLogs = getLogs();
   });
 
   beforeEach(async () => {
@@ -24,11 +29,9 @@ describe("Admin Read API (Debug)", () => {
     await prisma.conversation.deleteMany();
 
     capturedLogs.length = 0;
-    const { loggerFake, getLogs } = makeTestLogger();
-    capturedLogs = getLogs();
 
     loggerSpy = jest.spyOn(logger, "child").mockImplementation((context) => {
-      return loggerFake.child(context);
+      return loggerFakeInstance.child(context);
     });
   });
 
