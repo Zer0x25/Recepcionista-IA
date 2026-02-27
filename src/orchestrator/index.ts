@@ -8,6 +8,7 @@ export async function processIncomingMessage(
   conversationId: string,
   providerMessageId: string,
   requestId?: string,
+  inboundMessageData?: { content: string; payload: any },
 ) {
   const startTime = Date.now();
   const orchestratorLogger = logger.child({ requestId, conversationId });
@@ -36,9 +37,55 @@ export async function processIncomingMessage(
       currentState: initialState,
     });
 
-    // 1. Transition to CLASSIFYING (if allowed)
     let currentState = initialState;
-    if (isValidTransition(currentState, State.CLASSIFYING)) {
+    let lastMessageContent = conversation.messages[0]?.content;
+
+    // 1. Persist message + Transition to CLASSIFYING (Atomic)
+    if (inboundMessageData) {
+      lastMessageContent = inboundMessageData.content;
+      const canTransition = isValidTransition(currentState, State.CLASSIFYING);
+      const targetState = canTransition ? State.CLASSIFYING : currentState;
+
+      await prisma.$transaction([
+        prisma.message.create({
+          data: {
+            conversationId,
+            providerMessageId,
+            direction: "INBOUND",
+            content: inboundMessageData.content,
+            payload: inboundMessageData.payload,
+          },
+        }),
+        ...(canTransition
+          ? [
+              prisma.conversation.update({
+                where: { id: conversationId },
+                data: { state: targetState },
+              }),
+              prisma.stateTransition.create({
+                data: {
+                  conversationId,
+                  fromState: currentState,
+                  toState: targetState,
+                  triggeredBy: providerMessageId,
+                },
+              }),
+            ]
+          : []),
+      ]);
+
+      if (canTransition) {
+        orchestratorLogger.info({
+          msg: "State transition",
+          eventType: "STATE_TRANSITION",
+          providerMessageId,
+          fromState: currentState,
+          toState: targetState,
+          reason: "Initial classification",
+        });
+        currentState = targetState;
+      }
+    } else if (isValidTransition(currentState, State.CLASSIFYING)) {
       currentState = await transitionState(
         conversationId,
         currentState,
@@ -50,7 +97,7 @@ export async function processIncomingMessage(
 
     // 2. Decision Logic (Stub)
     let nextState: State;
-    if (shouldHandoff(lastMessage.content)) {
+    if (lastMessageContent && shouldHandoff(lastMessageContent)) {
       orchestratorLogger.info({
         msg: "Handoff triggered by content",
         eventType: "HANDOFF_TRIGGERED",
@@ -70,6 +117,9 @@ export async function processIncomingMessage(
         nextState,
         providerMessageId,
         requestId,
+        nextState === State.HANDOFF
+          ? "Handoff triggered by content"
+          : undefined,
       );
     }
 
@@ -109,13 +159,14 @@ async function transitionState(
   to: State,
   providerMessageId: string,
   requestId?: string,
+  reason?: string,
 ): Promise<State> {
   const transitionLogger = logger.child({ requestId, conversationId });
 
   if (from === to) {
     transitionLogger.info({
       msg: "State transition skipped (no-op)",
-      eventType: "state_transition_skipped_noop",
+      eventType: "STATE_TRANSITION_SKIPPED",
       providerMessageId,
       state: to,
     });
@@ -139,10 +190,11 @@ async function transitionState(
 
   transitionLogger.info({
     msg: "State transition",
-    eventType: "state_transition",
+    eventType: "STATE_TRANSITION",
     providerMessageId,
-    state_from: from,
-    state_to: to,
+    fromState: from,
+    toState: to,
+    reason,
   });
 
   return to;

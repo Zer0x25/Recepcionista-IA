@@ -92,7 +92,7 @@ describe("Webhook Correlation (ADR-005)", () => {
 
     // C) Verify consistency - specific check for important eventTypes
     const eventTypesFound = flowLogs.map((l) => l.eventType).filter(Boolean);
-    expect(eventTypesFound).toContain("state_transition");
+    expect(eventTypesFound).toContain("STATE_TRANSITION");
     expect(eventTypesFound).toContain("WEBHOOK_PROCESSED");
   });
 });

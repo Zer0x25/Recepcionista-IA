@@ -15,6 +15,9 @@ model Conversation {
   updatedAt       DateTime          @updatedAt
   messages        Message[]
   transitions     StateTransition[]
+
+  // Index for future metrics and filtering by conversation state
+  @@index([state])
 }
 
 enum State {

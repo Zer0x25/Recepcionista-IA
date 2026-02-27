@@ -3,7 +3,7 @@ import { prisma } from "../persistence/prisma.js";
 import { logger } from "../observability/logger.js";
 import { TwilioWebhookSchema } from "../validation/twilioSchema.js";
 import { processIncomingMessage } from "../orchestrator/index.js";
-import { State } from "@prisma/client";
+import { State, Prisma } from "@prisma/client";
 
 import twilio from "twilio";
 import { randomUUID } from "node:crypto";
@@ -144,22 +144,14 @@ export async function twilioWebhookHandler(fastify: FastifyInstance) {
           conversationId: conversation.id,
         });
 
-        // Save message
-        await prisma.message.create({
-          data: {
-            conversationId: conversation.id,
-            providerMessageId,
-            direction: "INBOUND",
-            content,
-            payload: request.body as any,
-          },
-        });
-
-        // 5. Orchestration
         const finalState = await processIncomingMessage(
           conversation.id,
           providerMessageId,
           requestId,
+          {
+            content,
+            payload: request.body,
+          },
         );
 
         // 6. Response Construction & Persistence
@@ -201,6 +193,19 @@ export async function twilioWebhookHandler(fastify: FastifyInstance) {
 
         return reply.code(200).type("text/xml").send(twiml);
       } catch (error) {
+        if (
+          error instanceof Prisma.PrismaClientKnownRequestError &&
+          error.code === "P2002"
+        ) {
+          requestLogger.info({
+            msg: "Concurrent idempotent hit (race condition)",
+            eventType: "WEBHOOK_IDEMPOTENT_HIT",
+            providerMessageId,
+            durationMs: Date.now() - startTime,
+          });
+          return reply.code(200).send("<Response></Response>");
+        }
+
         requestLogger.error({
           msg: "Error processing webhook",
           eventType: "WEBHOOK_ERROR",
