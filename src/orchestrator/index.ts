@@ -51,6 +51,10 @@ export async function processIncomingMessage(
     // 2. Decision Logic (Stub)
     let nextState: State;
     if (shouldHandoff(lastMessage.content)) {
+      orchestratorLogger.info({
+        msg: "Handoff triggered by content",
+        eventType: "HANDOFF_TRIGGERED",
+      });
       nextState = State.HANDOFF;
     } else {
       // In a real scenario, this would involve more complex logic or AI

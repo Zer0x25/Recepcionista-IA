@@ -27,7 +27,7 @@ async function verifyTwilioSignature(
       msg: "Twilio signature or auth token missing",
       hasSignature: !!signature,
       hasToken: !!twilioAuthToken,
-      eventType: "WEBHOOK_SECURITY_DENIED",
+      eventType: "WEBHOOK_REJECTED_INVALID_SIGNATURE",
     });
     return false;
   }
@@ -48,7 +48,7 @@ async function verifyTwilioSignature(
     log.warn({
       msg: "Invalid Twilio signature",
       url,
-      eventType: "WEBHOOK_SECURITY_DENIED",
+      eventType: "WEBHOOK_REJECTED_INVALID_SIGNATURE",
     });
   }
 
@@ -62,6 +62,12 @@ export async function twilioWebhookHandler(fastify: FastifyInstance) {
       const startTime = Date.now();
       const { requestId } = request;
       const requestLogger = logger.child({ requestId });
+
+      requestLogger.info({
+        msg: "Webhook received",
+        eventType: "WEBHOOK_RECEIVED",
+        payload: request.body,
+      });
 
       // 1. Validate signature
       const isValid = await verifyTwilioSignature(request, requestLogger);
@@ -97,7 +103,7 @@ export async function twilioWebhookHandler(fastify: FastifyInstance) {
         if (existingMessage) {
           requestLogger.info({
             msg: "Duplicate message received",
-            eventType: "WEBHOOK_DUPLICATE_IDEMPOTENCY",
+            eventType: "WEBHOOK_IDEMPOTENT_HIT",
             providerMessageId,
             durationMs: Date.now() - startTime,
           });
