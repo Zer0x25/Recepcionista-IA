@@ -74,13 +74,8 @@ describe("AI Adapter Contract Tests", () => {
     expect(failureLog.error).toMatch(/invalid_type|Required/i);
   });
 
-  it("should return fallback if AI provider returns invalid structure", async () => {
-    // We need to temporarily "break" the stub or how adapter interprets it
-    // Since aiProviderStub is internal to adapter.ts, we can't easily mock it without exporting it
-    // or using a more advanced mocking strategy (like proxyquire or similar).
-    // However, we can test the Validation logic by passing something that triggers a Zod error
-    // if we had exported the stub. Let's just trust the unit logic for now or mock the module.
-    // Alternative: The adapter uses `AIOutputSchema.parse(rawOutput)`.
-    // If we mock the whole module it's harder. Let's stick to the visible contract.
+  it.skip("should return fallback if AI provider returns invalid structure", async () => {
+    // Skipping for now as the provider stub is internal and not easily mockable
+    // without architectural changes.
   });
 });
