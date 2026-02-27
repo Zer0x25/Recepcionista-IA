@@ -1,5 +1,6 @@
 import { AggregatorService } from "./aggregator.service.js";
 import { logger } from "../observability/logger.js";
+import { AggregatorState } from "./aggregator.state.js";
 
 async function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
@@ -7,27 +8,60 @@ async function sleep(ms: number): Promise<void> {
 
 /**
  * Main loop for the metrics aggregator.
- * Runs every 60 seconds and aggregates the previous minute window.
+ * Aligns to minute boundaries and aggregates the previous full minute window.
  */
 async function main(): Promise<void> {
-  const intervalMs = 60_000;
-  logger.info({ msg: "Metrics Aggregator Runner starting", intervalMs });
+  logger.info({ msg: "Metrics Aggregator Runner starting" });
 
   // eslint-disable-next-line no-constant-condition
   while (true) {
-    try {
-      // Aggregate for the minute that just passed (e.g. at 12:01:05, aggregate 12:00:00-12:01:00)
-      const now = new Date();
-      const previousMinute = new Date(now.getTime() - 60_000);
+    const now = new Date();
+    // Calculate ms until next minute boundary
+    const nextMinute = new Date(
+      Math.floor(now.getTime() / 60_000) * 60_000 + 60_000,
+    );
+    const sleepMs = nextMinute.getTime() - now.getTime();
 
-      await AggregatorService.aggregateWindow(previousMinute);
+    await sleep(sleepMs);
+
+    const start = Date.now();
+    const windowStart = new Date(nextMinute.getTime() - 60_000);
+    const windowEnd = nextMinute;
+
+    try {
+      await AggregatorService.aggregateWindow(windowStart);
+
+      const durationMs = Date.now() - start;
+      AggregatorState.update({
+        lastRunAt: new Date(),
+        lastWindowStart: windowStart,
+        lastDurationMs: durationMs,
+        lastError: null,
+      });
+
+      logger.info({
+        eventType: "AGGREGATOR_TICK",
+        windowStart: windowStart.toISOString(),
+        windowEnd: windowEnd.toISOString(),
+        sleepMs,
+        durationMs,
+      });
     } catch (err: any) {
+      const durationMs = Date.now() - start;
+      AggregatorState.update({
+        lastRunAt: new Date(),
+        lastWindowStart: windowStart,
+        lastDurationMs: durationMs,
+        lastError: err?.message || "Unknown error",
+      });
+
       logger.error({
         eventType: "AGGREGATOR_RUNNER_ERROR",
         error: err?.message,
+        windowStart: windowStart.toISOString(),
+        durationMs,
       });
     }
-    await sleep(intervalMs);
   }
 }
 

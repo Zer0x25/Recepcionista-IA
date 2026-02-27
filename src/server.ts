@@ -1,12 +1,11 @@
+import { env } from "./config/env.js";
 import Fastify from "fastify";
 import formBody from "@fastify/formbody";
 import { logger } from "./observability/logger.js";
 import { twilioWebhookHandler } from "./channel/twilioWebhook.js";
 import { adminRoutes } from "./admin/adminRoutes.js";
+import { healthExtendedRoutes } from "./admin/health.extended.js";
 import { prisma } from "./persistence/prisma.js";
-import dotenv from "dotenv";
-
-dotenv.config();
 
 import { randomUUID } from "node:crypto";
 
@@ -29,7 +28,7 @@ import rateLimit from "@fastify/rate-limit";
 // Register plugins
 await fastify.register(formBody);
 await fastify.register(rateLimit, {
-  max: process.env.NODE_ENV === "test" ? 20 : 100,
+  max: env.NODE_ENV === "test" ? 20 : 100,
   timeWindow: "1 minute",
   hook: "preValidation",
   keyGenerator: (request) => {
@@ -51,10 +50,11 @@ await fastify.register(rateLimit, {
 // Register routes
 await fastify.register(twilioWebhookHandler);
 await fastify.register(adminRoutes);
+await fastify.register(healthExtendedRoutes);
 
 const start = async () => {
   try {
-    const port = Number(process.env.PORT) || 3000;
+    const { PORT: port } = env;
     const host = "0.0.0.0";
     await fastify.listen({ port, host });
     logger.info({
@@ -87,7 +87,7 @@ const shutdown = async () => {
 process.on("SIGTERM", shutdown);
 process.on("SIGINT", shutdown);
 
-if (process.env.NODE_ENV !== "test") {
+if (env.NODE_ENV !== "test") {
   start();
 }
 

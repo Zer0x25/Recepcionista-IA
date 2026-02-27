@@ -1,3 +1,4 @@
+import { env } from "./config/env.js";
 import { randomUUID } from "crypto";
 import { logger } from "./observability/logger.js";
 import { claimNextJobs } from "./jobs/claim.js";

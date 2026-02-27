@@ -1,35 +1,35 @@
-/**
- * src/config/env.ts
- *
- * Validates required environment variables at import time.
- * Import this module before any infrastructure that depends on these vars.
- *
- * Does NOT log sensitive values.
- */
+import { z } from "zod";
+import { logger } from "../observability/logger.js";
 
-function requireEnv(name: string): string {
-  const value = process.env[name];
-  if (!value || value.trim() === "") {
-    throw new Error(
-      `[env] Missing required environment variable: ${name}. ` +
-        `Set it before starting the worker.`,
-    );
+const envSchema = z.object({
+  NODE_ENV: z
+    .enum(["development", "test", "production"])
+    .default("development"),
+  DATABASE_URL: z.string().url(),
+  PORT: z.coerce.number().int().default(3000),
+  ADMIN_API_KEY: z.string().min(8),
+});
+
+function validateEnv() {
+  try {
+    return envSchema.parse(process.env);
+  } catch (err: any) {
+    if (err instanceof z.ZodError) {
+      const missingVars = err.issues.map((i) => i.path.join(".")).join(", ");
+      logger.error({
+        msg: "Environment validation failed",
+        missingVars,
+        errors: err.format(),
+      });
+      console.error(`❌ Invalid environment variables: ${missingVars}`);
+    } else {
+      logger.error({
+        msg: "Unknown environment validation error",
+        error: err?.message,
+      });
+    }
+    process.exit(1);
   }
-  return value;
 }
 
-/**
- * Twilio credentials — lazy-validated so tests can set process.env before import.
- * Call getTwilioEnv() at runtime (not module-level) to allow tests to inject vars.
- */
-export function getTwilioEnv(): {
-  accountSid: string;
-  authToken: string;
-  whatsappFrom: string;
-} {
-  return {
-    accountSid: requireEnv("TWILIO_ACCOUNT_SID"),
-    authToken: requireEnv("TWILIO_AUTH_TOKEN"),
-    whatsappFrom: requireEnv("TWILIO_WHATSAPP_FROM"),
-  };
-}
+export const env = validateEnv();

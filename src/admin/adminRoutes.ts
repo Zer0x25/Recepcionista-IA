@@ -1,3 +1,4 @@
+import { env } from "../config/env.js";
 import { FastifyInstance, FastifyRequest, FastifyReply } from "fastify";
 import { z } from "zod";
 import {
@@ -25,7 +26,7 @@ export async function adminRoutes(fastify: FastifyInstance) {
   fastify.addHook(
     "preHandler",
     async (request: FastifyRequest, reply: FastifyReply) => {
-      const adminKey = process.env.ADMIN_API_KEY;
+      const adminKey = env.ADMIN_API_KEY;
       const providedKey = request.headers["x-admin-key"];
 
       const log = logger.child({
