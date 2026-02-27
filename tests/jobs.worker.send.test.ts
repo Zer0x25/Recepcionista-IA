@@ -6,7 +6,7 @@
  * Strategy:
  * - Mock sendWhatsappMessage so no real Twilio calls happen.
  * - Use real DB (test Postgres) for full idempotency verification.
- * - Verify exactly 1 OUTBOUND message per job, payload.phase=SENT, payload.twilioSid set.
+ * - Verify OUTBOUND phases: PREPARED→SENDING→SENT with correct payload fields.
  * - Verify second run does NOT call sendWhatsappMessage again.
  */
 
@@ -29,9 +29,10 @@ process.env.TWILIO_WHATSAPP_FROM = "whatsapp:+14155238886";
 // Dynamic imports AFTER mocks are set
 const { prisma } = await import("../src/persistence/prisma.js");
 const { runWorkerOnce } = await import("../src/worker.js");
+type SendFn = () => Promise<{ sid: string }>;
 const { sendWhatsappMessage } =
   (await import("../src/channel/twilioSend.js")) as {
-    sendWhatsappMessage: jest.Mock<() => Promise<{ sid: string }>>;
+    sendWhatsappMessage: jest.Mock<SendFn>;
   };
 
 const PAST = new Date(Date.now() - 60_000);
@@ -106,12 +107,17 @@ describe("runWorkerOnce — Twilio outbound send", () => {
     // 3. providerMessageId is idempotency key
     expect(outbound[0].providerMessageId).toBe(`job-${jobId}`);
 
-    // 4. payload reflects SENT state with Twilio sid
+    // 4. payload reflects SENT state
     const payload = outbound[0].payload as Record<string, any>;
     expect(payload.phase).toBe("SENT");
     expect(payload.twilioSid).toBe(FAKE_SID);
+    expect(typeof payload.sentAt).toBe("string");
 
-    // 5. sendWhatsappMessage was called once
+    // 5. SENDING lock fields cleared (not present after SENT)
+    expect(payload.sendingLockedAt).toBeUndefined();
+    expect(payload.sendingLockedBy).toBeUndefined();
+
+    // 6. sendWhatsappMessage was called once
     expect(sendWhatsappMessage).toHaveBeenCalledTimes(1);
   });
 
@@ -149,5 +155,28 @@ describe("runWorkerOnce — Twilio outbound send", () => {
     // Job still ends as DONE
     const job = await prisma.job.findUniqueOrThrow({ where: { id: jobId } });
     expect(job.status).toBe("DONE");
+  });
+
+  it("should revert OUTBOUND to PREPARED and requeue job when Twilio send fails", async () => {
+    // Make the first (and only) Twilio call fail
+    (sendWhatsappMessage as jest.Mock<SendFn>).mockRejectedValueOnce(
+      new Error("Twilio network error"),
+    );
+
+    await runWorkerOnce({ workerId: "test-worker-send-fail" });
+
+    // Job should be back in PENDING (retry scheduled)
+    const job = await prisma.job.findUniqueOrThrow({ where: { id: jobId } });
+    expect(job.status).toBe("PENDING");
+    expect(job.lastError).toContain("Twilio network error");
+
+    // OUTBOUND should have reverted to PREPARED (not stuck in SENDING)
+    const outbound = await prisma.message.findMany({
+      where: { conversationId, direction: "OUTBOUND" },
+    });
+    expect(outbound.length).toBe(1);
+    const payload = outbound[0].payload as Record<string, any>;
+    expect(payload.phase).toBe("PREPARED");
+    expect(payload.lastSendError).toContain("Twilio network error");
   });
 });

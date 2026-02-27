@@ -6,22 +6,33 @@ import { calcBackoffMs } from "./backoff.js";
 
 const REPLY_STUB = "Recibido, estoy procesando tu solicitud.";
 
+/** How long (ms) to yield before the SENDING-collision worker retries. */
+const SENDING_COLLISION_BACKOFF_MS = 2_000;
+
 /**
  * Process a single claimed Job row.
  *
- * Idempotency strategy (two levels):
+ * Idempotency strategy — three levels:
  *
- * A) DB level: OUTBOUND Message is upserted on providerMessageId = "job-${job.id}".
- *    The unique constraint guarantees exactly one row per job, regardless of retries.
- *    providerMessageId stays "job-${job.id}" forever — no schema change needed.
+ * A) DB unique constraint: OUTBOUND Message is upserted on
+ *    providerMessageId = "job-${job.id}". Exactly one row per job, always.
  *
- * B) Provider level: payload.phase tracks "PREPARED" vs "SENT".
- *    If the record already has phase="SENT", we skip the Twilio call entirely.
- *    This prevents double-sends if the process crashed after Twilio returned
- *    but before the DB was updated — the next retry will see "PREPARED" and retry,
- *    but if the job crashed after the DB update then "SENT" precludes re-sending.
+ * B) CAS lock (PREPARED → SENDING): before calling Twilio, we do an atomic
+ *    updateMany WHERE phase='PREPARED'. Only one worker can flip this;
+ *    the loser sees count=0 and yields (requeues with 2s backoff without
+ *    incrementing attempts).
  *
- * Twilio MessageSid is stored in payload.twilioSid (no additional column / migration).
+ * C) Post-send mark: after Twilio succeeds → phase='SENT' + twilioSid.
+ *    If we crash after Twilio but before the DB write, the next retry
+ *    will see phase='SENDING'. Since SENDING has no count=1 winner, it
+ *    requeues again, and eventually a phase-revert on failure (or a
+ *    SENDING-TTL cleanup in a future step) brings it back to PREPARED.
+ *    For now: a crash between Twilio-success and SENT-write means the
+ *    next attempt sees SENDING → yields to no-one → perpetual 2s requeue.
+ *    Acceptable for Step 4.1; Step 4.2 will add SENDING TTL expiry.
+ *
+ * Phase field: stored inside Message.payload JSON (no schema change).
+ * Twilio sid: stored in payload.twilioSid.
  */
 export async function processJob(job: any): Promise<void> {
   const startTime = Date.now();
@@ -29,6 +40,7 @@ export async function processJob(job: any): Promise<void> {
     jobId: job.id,
     type: job.type,
     conversationId: job.conversationId,
+    workerId: job.lockedBy ?? "unknown",
   });
 
   jobLogger.info({ eventType: "JOB_PROCESS_STARTED" });
@@ -38,7 +50,7 @@ export async function processJob(job: any): Promise<void> {
       throw new Error(`Unsupported job type: ${job.type}`);
     }
 
-    // 1. Load conversation to get providerContact (outbound "to")
+    // ── 1. Load conversation ─────────────────────────────────────────────
     const conversation = await prisma.conversation.findUnique({
       where: { id: job.conversationId },
       include: {
@@ -64,60 +76,150 @@ export async function processJob(job: any): Promise<void> {
     const replyContent = REPLY_STUB;
     const outboundProviderMessageId = `job-${job.id}`;
 
-    // 2. Upsert OUTBOUND message — phase="PREPARED"
-    //    On retry: if row already exists (phase=PREPARED or SENT), upsert is a no-op
-    //    for the create path; update leaves the existing data intact.
-    const existingOutbound = await prisma.message.upsert({
-      where: { providerMessageId: outboundProviderMessageId },
-      create: {
-        conversationId: job.conversationId,
+    // ── 2. Upsert OUTBOUND as PREPARED (idempotent row creation) ─────────
+    // Under true concurrency two workers may race the INSERT path of the upsert.
+    // Postgres will reject the second one with a unique-constraint error (P2002).
+    // That's fine — the row already exists, and the CAS in step 3 will gate sends.
+    try {
+      await prisma.message.upsert({
+        where: { providerMessageId: outboundProviderMessageId },
+        create: {
+          conversationId: job.conversationId,
+          providerMessageId: outboundProviderMessageId,
+          direction: Direction.OUTBOUND,
+          content: replyContent,
+          payload: {
+            source: "worker",
+            jobId: job.id,
+            phase: "PREPARED",
+          } as Prisma.InputJsonValue,
+        },
+        update: {}, // no-op — preserve whatever phase is already there
+      });
+    } catch (upsertErr: any) {
+      if (upsertErr?.code !== "P2002") throw upsertErr;
+      // P2002: row already exists from a concurrent worker — safe to continue
+      jobLogger.info({
+        eventType: "JOB_OUTBOUND_UPSERT_RACE",
         providerMessageId: outboundProviderMessageId,
-        direction: Direction.OUTBOUND,
-        content: replyContent,
+      });
+    }
+
+    // ── 3. CAS: PREPARED → SENDING ───────────────────────────────────────
+    //
+    // updateMany matches only if phase is still "PREPARED".
+    // Postgres evaluates this atomically; exactly one concurrent caller wins.
+    // count==0 means someone else already flipped (or it's already SENT).
+    const casResult = await prisma.message.updateMany({
+      where: {
+        providerMessageId: outboundProviderMessageId,
+        payload: {
+          path: ["phase"],
+          equals: "PREPARED",
+        },
+      },
+      data: {
         payload: {
           source: "worker",
           jobId: job.id,
-          phase: "PREPARED",
+          phase: "SENDING",
+          sendingLockedAt: new Date().toISOString(),
+          sendingLockedBy: job.lockedBy ?? "unknown",
         } as Prisma.InputJsonValue,
       },
-      update: {}, // no-op on duplicate — preserve existing phase
     });
 
-    // 3. Idempotency guard: skip send if already sent
-    const existingPayload = existingOutbound.payload as Record<string, any>;
-    if (existingPayload?.phase === "SENT") {
-      jobLogger.info({
-        eventType: "JOB_OUTBOUND_ALREADY_SENT",
-        providerMessageId: outboundProviderMessageId,
+    if (casResult.count === 0) {
+      // Lost the CAS race — read current phase to decide what to do
+      const current = await prisma.message.findUnique({
+        where: { providerMessageId: outboundProviderMessageId },
+        select: { payload: true },
       });
-      // Still mark the job DONE (crash recovery path)
-      await prisma.job.update({
-        where: { id: job.id },
-        data: {
-          status: JobStatus.DONE,
-          lockedAt: null,
-          lockedBy: null,
-          lastError: null,
-        },
-      });
-      const durationMs = Date.now() - startTime;
-      jobLogger.info({ eventType: "JOB_PROCESS_SUCCEEDED", durationMs });
-      return;
+      const currentPhase = (current?.payload as Record<string, any>)?.phase;
+
+      if (currentPhase === "SENT") {
+        // Another worker already completed the send → mark DONE and exit
+        jobLogger.info({
+          eventType: "JOB_OUTBOUND_ALREADY_SENT",
+          providerMessageId: outboundProviderMessageId,
+        });
+        await prisma.job.update({
+          where: { id: job.id },
+          data: {
+            status: JobStatus.DONE,
+            lockedAt: null,
+            lockedBy: null,
+            lastError: null,
+          },
+        });
+        const durationMs = Date.now() - startTime;
+        jobLogger.info({ eventType: "JOB_PROCESS_SUCCEEDED", durationMs });
+        return;
+      }
+
+      if (currentPhase === "SENDING") {
+        // Another worker is mid-send right now → yield with short backoff.
+        // Do NOT increment attempts — this is a concurrency yield, not a failure.
+        const nextRunAt = new Date(Date.now() + SENDING_COLLISION_BACKOFF_MS);
+        await prisma.job.update({
+          where: { id: job.id },
+          data: {
+            status: JobStatus.PENDING,
+            nextRunAt,
+            lockedAt: null,
+            lockedBy: null,
+          },
+        });
+        const durationMs = Date.now() - startTime;
+        jobLogger.warn({
+          eventType: "JOB_SEND_COLLISION",
+          durationMs,
+          currentPhase,
+          nextRunAt: nextRunAt.toISOString(),
+        });
+        return;
+      }
+
+      // Unexpected phase value — surface as an error so the job retries
+      throw new Error(
+        `Unexpected outbound phase after CAS miss: ${currentPhase ?? "null"}`,
+      );
     }
 
-    // 4. Send via Twilio
+    // ── 4. Send via Twilio ───────────────────────────────────────────────
     const to = conversation.providerContact;
     const from = process.env.TWILIO_WHATSAPP_FROM ?? "";
 
-    const { sid } = await sendWhatsappMessage({
-      to,
-      from,
-      body: replyContent,
-      requestId: job.id,
-      conversationId: job.conversationId,
-    });
+    let sid: string;
+    try {
+      const result = await sendWhatsappMessage({
+        to,
+        from,
+        body: replyContent,
+        requestId: job.id,
+        conversationId: job.conversationId,
+      });
+      sid = result.sid;
+    } catch (sendError: any) {
+      // Twilio failed — revert to PREPARED so the next retry can re-attempt.
+      const errMsg =
+        sendError instanceof Error ? sendError.message : String(sendError);
+      await prisma.message.update({
+        where: { providerMessageId: outboundProviderMessageId },
+        data: {
+          payload: {
+            source: "worker",
+            jobId: job.id,
+            phase: "PREPARED",
+            lastSendError: errMsg,
+          } as Prisma.InputJsonValue,
+        },
+      });
+      // Re-throw so the outer catch schedules the job retry
+      throw sendError;
+    }
 
-    // 5. Update OUTBOUND record to SENT with Twilio sid
+    // ── 5. Mark SENT with Twilio sid ─────────────────────────────────────
     await prisma.message.update({
       where: { providerMessageId: outboundProviderMessageId },
       data: {
@@ -126,11 +228,12 @@ export async function processJob(job: any): Promise<void> {
           jobId: job.id,
           phase: "SENT",
           twilioSid: sid,
+          sentAt: new Date().toISOString(),
         } as Prisma.InputJsonValue,
       },
     });
 
-    // 6. Mark job DONE
+    // ── 6. Mark job DONE ─────────────────────────────────────────────────
     await prisma.job.update({
       where: { id: job.id },
       data: {
