@@ -7,6 +7,47 @@ jest.unstable_mockModule("../src/channel/twilioSend.js", () => ({
     .mockResolvedValue({ sid: "SM_WORKER_TEST_STUB" }),
 }));
 
+// Mock logger to allow capturing
+jest.unstable_mockModule("../src/observability/logger.js", () => {
+  const allCalls: any[] = [];
+  const createFakeLogger = (context: any = {}) => ({
+    info: (obj: any) =>
+      allCalls.push({
+        ...context,
+        ...(typeof obj === "string" ? { msg: obj } : obj),
+        level: "info",
+      }),
+    warn: (obj: any) =>
+      allCalls.push({
+        ...context,
+        ...(typeof obj === "string" ? { msg: obj } : obj),
+        level: "warn",
+      }),
+    error: (obj: any) =>
+      allCalls.push({
+        ...context,
+        ...(typeof obj === "string" ? { msg: obj } : obj),
+        level: "error",
+      }),
+    debug: (obj: any) =>
+      allCalls.push({
+        ...context,
+        ...(typeof obj === "string" ? { msg: obj } : obj),
+        level: "debug",
+      }),
+    child: (newContext: any) => createFakeLogger({ ...context, ...newContext }),
+  });
+  const loggerFake = createFakeLogger();
+  return {
+    logger: loggerFake,
+    default: loggerFake,
+    getTestLogs: () => allCalls,
+    clearTestLogs: () => {
+      allCalls.length = 0;
+    },
+  };
+});
+
 // Set env vars before modules load
 process.env.TWILIO_ACCOUNT_SID = "ACfake";
 process.env.TWILIO_AUTH_TOKEN = "fake_token";
@@ -14,6 +55,8 @@ process.env.TWILIO_WHATSAPP_FROM = "whatsapp:+14155238886";
 
 const { prisma } = await import("../src/persistence/prisma.js");
 const { runWorkerOnce } = await import("../src/worker.js");
+const { sendWhatsappMessage } = await import("../src/channel/twilioSend.js");
+const { getTestLogs, clearTestLogs } = (await import("../src/observability/logger.js")) as any;
 
 const PAST = new Date(Date.now() - 60_000);
 
@@ -146,5 +189,61 @@ describe("runWorkerOnce — end-to-end", () => {
       where: { conversationId: conv2.id, direction: "OUTBOUND" },
     });
     expect(outbound.length).toBe(0);
+  });
+
+  it("should log JOB_PROCESS_FAILED_FINAL with all structured fields on max attempts", async () => {
+    // 0. Clean DB and logs to avoid interference from beforeEach job or other tests
+    await cleanDb();
+    clearTestLogs();
+
+    // 1. Mock Twilio to fail
+    (
+      sendWhatsappMessage as unknown as jest.MockedFunction<typeof sendWhatsappMessage>
+    ).mockRejectedValueOnce(new Error("Twilio down"));
+
+    // 2. Create a job that will fail on its first attempt (maxAttempts=1)
+    const conv = await prisma.conversation.create({
+      data: { providerContact: "+541100000000" },
+    });
+    await prisma.message.create({
+      data: {
+        conversationId: conv.id,
+        providerMessageId: `inbound-${Date.now()}`,
+        direction: "INBOUND",
+        content: "Fail me",
+        payload: {},
+      },
+    });
+    const job = await prisma.job.create({
+      data: {
+        type: "AI_REPLY_REQUESTED",
+        conversationId: conv.id,
+        payload: {},
+        status: "PENDING",
+        nextRunAt: PAST,
+        maxAttempts: 1,
+        idempotencyKey: `fail-test-${conv.id}-${Date.now()}`,
+      },
+    });
+
+    // 3. Run worker
+    await runWorkerOnce({ workerId: "fail-worker" });
+
+    // 4. Verify log
+    const logs = getTestLogs();
+    const finalFailLog = logs.find((l: any) => l.eventType === "JOB_PROCESS_FAILED_FINAL");
+
+    expect(finalFailLog).toBeDefined();
+    expect(finalFailLog.level).toBe("error");
+    expect(typeof finalFailLog.durationMs).toBe("number");
+    expect(finalFailLog.attempts).toBe(1);
+    expect(finalFailLog.maxAttempts).toBe(1);
+    expect(finalFailLog.jobStatus).toBe("FAILED");
+    expect(finalFailLog.providerMessageId).toBe(`job-${job.id}`);
+    expect(finalFailLog.error).toBe("Twilio down");
+    expect(finalFailLog.lastError).toBe("Twilio down");
+    expect(finalFailLog.type).toBe("AI_REPLY_REQUESTED");
+    expect(finalFailLog.jobId).toBe(job.id);
+    expect(finalFailLog.conversationId).toBe(conv.id);
   });
 });

@@ -323,7 +323,16 @@ export async function processJob(job: any): Promise<void> {
       });
 
       jobLogger.error({
+        eventType: "JOB_PROCESS_FAILED_FINAL",
+        durationMs,
+        attempts: attemptsNext,
+        maxAttempts: job.maxAttempts ?? 5,
+        jobStatus: "FAILED",
+        providerMessageId: `job-${job.id}`,
         error: errorMsg,
+        lastError: errorMsg,
+        type: job.type,
+        note: "max attempts reached",
       });
 
       await recordOperationalEvent({
@@ -352,6 +361,7 @@ export async function processJob(job: any): Promise<void> {
         attempts: attemptsNext,
         nextRunAt: nextRunAt.toISOString(),
         error: errorMsg,
+        type: job.type,
       });
     }
   }
