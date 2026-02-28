@@ -41,7 +41,7 @@ await fastify.register(rateLimit, {
     const from = (request.body as any)?.From;
     return from || request.ip;
   },
-  onExceeding: (request, key) => {
+  onExceeded: (request, key) => {
     logger.warn({
       msg: "Rate limit exceeded",
       eventType: "WEBHOOK_RATE_LIMITED",
