@@ -72,7 +72,7 @@ describe("Webhook Logging Sanitization", () => {
     expect(receivedLog.hasSignatureHeader).toBe(false); // Insecure mode in tests
   });
 
-  it("should log full payload if LOG_WEBHOOK_PAYLOAD is true and not in production", async () => {
+  it("should redact PII in debug log if LOG_WEBHOOK_PAYLOAD is true and in development", async () => {
     process.env.LOG_WEBHOOK_PAYLOAD = "true";
     process.env.NODE_ENV = "development";
 
@@ -82,6 +82,7 @@ describe("Webhook Logging Sanitization", () => {
       From: "+1111111111",
       To: "+9999999999",
       AccountSid: "AC_TEST",
+      MediaUrl0: "https://example.com/image.png",
     };
 
     await supertest(fastify.server)
@@ -93,5 +94,54 @@ describe("Webhook Logging Sanitization", () => {
     expect(debugLog).toBeDefined();
     expect(debugLog.payload).toBeDefined();
     expect(debugLog.payload.MessageSid).toBe("SM_DEBUG_TEST");
+    expect(debugLog.payload.From).toBe("...1111");
+    expect(debugLog.payload.Body).toBe("[redacted] (len: 14)");
+    expect(debugLog.payload.MediaUrl0).toBe("[redacted]");
+  });
+
+  it("should NOT log debug payload when NODE_ENV is test", async () => {
+    process.env.LOG_WEBHOOK_PAYLOAD = "true";
+    process.env.NODE_ENV = "test";
+
+    const payload = {
+      MessageSid: "SM_DEBUG_TEST_TEST",
+      Body: "Test message",
+      From: "+1111111111",
+      To: "+9999999999",
+      AccountSid: "AC_TEST",
+    };
+
+    await supertest(fastify.server)
+      .post("/webhooks/twilio")
+      .send(new URLSearchParams(payload).toString())
+      .set("Content-Type", "application/x-www-form-urlencoded");
+
+    const debugLog = capturedLogs.find((l) => l.eventType === "WEBHOOK_PAYLOAD_DEBUG");
+    expect(debugLog).toBeUndefined();
+  });
+
+  it("should NOT include payload in WEBHOOK_VALIDATION_FAILED log", async () => {
+    // Missing MessageSid to trigger validation failure
+    const payload = {
+      Body: "Incomplete payload",
+      From: "+1111111111",
+      To: "+9999999999",
+      AccountSid: "AC_TEST",
+    };
+
+    const response = await supertest(fastify.server)
+      .post("/webhooks/twilio")
+      .send(new URLSearchParams(payload as any).toString())
+      .set("Content-Type", "application/x-www-form-urlencoded");
+
+    expect(response.status).toBe(400);
+
+    const validationFailedLog = capturedLogs.find(
+      (l) => l.eventType === "WEBHOOK_VALIDATION_FAILED",
+    );
+    expect(validationFailedLog).toBeDefined();
+    expect(validationFailedLog.payload).toBeUndefined();
+    expect(validationFailedLog.errors).toBeDefined();
+    expect(validationFailedLog.fromLast4).toBe("1111");
   });
 });
