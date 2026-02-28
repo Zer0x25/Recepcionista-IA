@@ -28,10 +28,17 @@ describe("Environment Validation", () => {
   });
 
   it("should fail fast if DATABASE_URL is missing", async () => {
+    const mockExit = jest.spyOn(process, "exit").mockImplementation((() => {
+      throw new Error("process.exit(1) called");
+    }) as any);
+
     process.env.DATABASE_URL = "";
 
     // Use a dynamic import to trigger validation
-    await expect(import("../../src/config/env.js")).rejects.toThrow();
+    await expect(import("../../src/config/env.js")).rejects.toThrow("process.exit(1) called");
+    expect(mockExit).toHaveBeenCalledWith(1);
+
+    mockExit.mockRestore();
   });
 
   it("should pass if all required env vars are present and valid", async () => {

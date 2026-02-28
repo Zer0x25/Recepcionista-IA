@@ -5,3 +5,8 @@ coverage/
 .env
 
 /src/generated/prisma
+
+# Output artifacts
+lint_output.txt
+test_output.txt
+*.log

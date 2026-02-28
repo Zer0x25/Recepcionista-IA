@@ -24,7 +24,7 @@ function validateEnv() {
       missingVars,
       errors: result.error.format(),
     });
-    throw new Error(`Environment validation failed: ${missingVars}`);
+    process.exit(1);
   }
   return result.data;
 }
@@ -36,9 +36,9 @@ export const env = validateEnv();
  * Throws if Twilio vars are missing when called.
  */
 export function getTwilioEnv() {
-  const accountSid = process.env.TWILIO_ACCOUNT_SID;
-  const authToken = process.env.TWILIO_AUTH_TOKEN;
-  const whatsappFrom = process.env.TWILIO_WHATSAPP_FROM;
+  const accountSid = env.TWILIO_ACCOUNT_SID;
+  const authToken = env.TWILIO_AUTH_TOKEN;
+  const whatsappFrom = env.TWILIO_WHATSAPP_FROM;
 
   if (!accountSid || !authToken || !whatsappFrom) {
     throw new Error(
