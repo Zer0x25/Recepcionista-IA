@@ -1,5 +1,5 @@
 ---
-trigger: manual
+trigger: always_on
 ---
 
 # SYSTEM RULE — Execution Mode (Aligned v2)

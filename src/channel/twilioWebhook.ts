@@ -71,11 +71,25 @@ export async function twilioWebhookHandler(fastify: FastifyInstance) {
       ...safeFields,
     });
 
-    if (process.env.NODE_ENV !== "production" && process.env.LOG_WEBHOOK_PAYLOAD === "true") {
+    if (process.env.NODE_ENV === "development" && process.env.LOG_WEBHOOK_PAYLOAD === "true") {
+      const debugPayload = { ...body };
+      if (debugPayload.From) {
+        debugPayload.From = `...${String(debugPayload.From).slice(-4)}`;
+      }
+      if (debugPayload.Body) {
+        debugPayload.Body = `[redacted] (len: ${String(debugPayload.Body).length})`;
+      }
+      // Redact MediaUrl fields
+      Object.keys(debugPayload).forEach((key) => {
+        if (key.startsWith("MediaUrl")) {
+          debugPayload[key] = "[redacted]";
+        }
+      });
+
       requestLogger.debug({
-        msg: "Full webhook payload for debug",
+        msg: "Full webhook payload for debug (redacted)",
         eventType: "WEBHOOK_PAYLOAD_DEBUG",
-        payload: request.body,
+        payload: debugPayload,
       });
     }
 
@@ -91,8 +105,8 @@ export async function twilioWebhookHandler(fastify: FastifyInstance) {
       requestLogger.error({
         msg: "Invalid Twilio payload",
         eventType: "WEBHOOK_VALIDATION_FAILED",
+        ...safeFields,
         errors: result.error.format(),
-        payload: request.body,
         durationMs: Date.now() - startTime,
       });
       return reply.code(400).send({ error: "Invalid payload" });
