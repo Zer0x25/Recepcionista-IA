@@ -18,7 +18,6 @@ describe("Webhook Logging Sanitization", () => {
   afterAll(async () => {
     await fastify.close();
     await prisma.$disconnect();
-    process.env.ALLOW_INSECURE_WEBHOOK = "false";
   });
 
   beforeEach(async () => {

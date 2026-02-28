@@ -39,7 +39,6 @@ describe("Webhook → Job creation (ADR-006)", () => {
   afterAll(async () => {
     await fastify.close();
     await prisma.$disconnect();
-    process.env.ALLOW_INSECURE_WEBHOOK = "false";
     process.env.NODE_ENV = "test";
   });
 

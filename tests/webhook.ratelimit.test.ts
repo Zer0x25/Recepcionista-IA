@@ -13,7 +13,6 @@ describe("Twilio Webhook Rate Limiting (Audit)", () => {
   afterAll(async () => {
     await fastify.close();
     await prisma.$disconnect();
-    process.env.ALLOW_INSECURE_WEBHOOK = "false";
     delete process.env.RATE_LIMIT_MAX;
   });
 
