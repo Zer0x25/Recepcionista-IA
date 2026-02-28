@@ -1,4 +1,3 @@
-import { jest } from "@jest/globals";
 import supertest from "supertest";
 import { fastify } from "../src/server.js";
 import { prisma } from "../src/persistence/prisma.js";
@@ -17,7 +16,6 @@ describe("Webhook Concurrency and Atomicity", () => {
   afterAll(async () => {
     await fastify.close();
     await prisma.$disconnect();
-    process.env.ALLOW_INSECURE_WEBHOOK = "false";
     process.env.NODE_ENV = "test";
   });
 

@@ -62,10 +62,7 @@ export async function sendWhatsappMessage(
 
   const timeoutPromise = new Promise<never>((_, reject) => {
     setTimeout(
-      () =>
-        reject(
-          new Error(`Twilio send timed out after ${TWILIO_SEND_TIMEOUT_MS}ms`),
-        ),
+      () => reject(new Error(`Twilio send timed out after ${TWILIO_SEND_TIMEOUT_MS}ms`)),
       TWILIO_SEND_TIMEOUT_MS,
     );
   });

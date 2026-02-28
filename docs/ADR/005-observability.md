@@ -1,7 +1,9 @@
 # ADR-005
+
 # Observability Strategy
 
 ## Status
+
 Accepted
 
 ## Requirements

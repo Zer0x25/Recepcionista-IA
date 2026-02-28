@@ -1,10 +1,6 @@
 import { prisma } from "../../src/persistence/prisma.js";
-import {
-  AggregatorService,
-  floorToMinute,
-} from "../../src/metrics/aggregator.service.js";
+import { AggregatorService, floorToMinute } from "../../src/metrics/aggregator.service.js";
 import { JobStatus, OperationalEventType } from "@prisma/client";
-import { recordOperationalEvent } from "../../src/metrics/events.repository.js";
 
 async function cleanDb() {
   await prisma.operationalEvent.deleteMany();

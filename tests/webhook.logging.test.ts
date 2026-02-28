@@ -1,7 +1,7 @@
-import { jest } from "@jest/globals";
 import supertest from "supertest";
 import { fastify } from "../src/server.js";
 import { prisma } from "../src/persistence/prisma.js";
+import { jest } from "@jest/globals";
 import { logger } from "../src/observability/logger.js";
 import { makeTestLogger } from "./testUtils.js";
 
@@ -18,7 +18,6 @@ describe("Webhook Logging Sanitization", () => {
   afterAll(async () => {
     await fastify.close();
     await prisma.$disconnect();
-    process.env.ALLOW_INSECURE_WEBHOOK = "false";
   });
 
   beforeEach(async () => {
@@ -57,9 +56,7 @@ describe("Webhook Logging Sanitization", () => {
       .send(new URLSearchParams(payload).toString())
       .set("Content-Type", "application/x-www-form-urlencoded");
 
-    const receivedLog = capturedLogs.find(
-      (l) => l.eventType === "WEBHOOK_RECEIVED",
-    );
+    const receivedLog = capturedLogs.find((l) => l.eventType === "WEBHOOK_RECEIVED");
     expect(receivedLog).toBeDefined();
 
     // Verify sanitization
@@ -92,9 +89,7 @@ describe("Webhook Logging Sanitization", () => {
       .send(new URLSearchParams(payload).toString())
       .set("Content-Type", "application/x-www-form-urlencoded");
 
-    const debugLog = capturedLogs.find(
-      (l) => l.eventType === "WEBHOOK_PAYLOAD_DEBUG",
-    );
+    const debugLog = capturedLogs.find((l) => l.eventType === "WEBHOOK_PAYLOAD_DEBUG");
     expect(debugLog).toBeDefined();
     expect(debugLog.payload).toBeDefined();
     expect(debugLog.payload.MessageSid).toBe("SM_DEBUG_TEST");

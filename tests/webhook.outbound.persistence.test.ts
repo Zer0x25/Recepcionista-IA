@@ -1,4 +1,3 @@
-import { jest } from "@jest/globals";
 import supertest from "supertest";
 import { fastify } from "../src/server.js";
 import { prisma } from "../src/persistence/prisma.js";
@@ -17,7 +16,6 @@ describe("Twilio Webhook Outbound Persistence (Audit)", () => {
   afterAll(async () => {
     await fastify.close();
     await prisma.$disconnect();
-    process.env.ALLOW_INSECURE_WEBHOOK = "false";
     process.env.NODE_ENV = "test";
   });
 
@@ -49,9 +47,7 @@ describe("Twilio Webhook Outbound Persistence (Audit)", () => {
     expect(conversation).toBeDefined();
 
     // Webhook must NOT create OUTBOUND messages — that is the worker's responsibility
-    const outbound = conversation?.messages.find(
-      (m) => m.direction === "OUTBOUND",
-    );
+    const outbound = conversation?.messages.find((m) => m.direction === "OUTBOUND");
     expect(outbound).toBeUndefined();
 
     // Webhook MUST create a Job for the worker to process
@@ -63,8 +59,6 @@ describe("Twilio Webhook Outbound Persistence (Audit)", () => {
     });
     expect(job).toBeDefined();
     expect(job?.status).toBe("PENDING");
-    expect(job?.idempotencyKey).toBe(
-      `ai-reply:${conversation!.id}:SM_OUTBOUND_AUDIT`,
-    );
+    expect(job?.idempotencyKey).toBe(`ai-reply:${conversation!.id}:SM_OUTBOUND_AUDIT`);
   });
 });

@@ -1,7 +1,9 @@
 # ADR-003
+
 # AI Responsibility Boundary
 
 ## Status
+
 Accepted
 
 ## Principle

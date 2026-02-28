@@ -1,10 +1,14 @@
-import { jest } from "@jest/globals";
 import supertest from "supertest";
 import { fastify } from "../src/server.js";
 import { prisma } from "../src/persistence/prisma.js";
 
 describe("Twilio Webhook Security (Audit)", () => {
+  let originalInsecure: string | undefined;
+  let originalNodeEnv: string | undefined;
+
   beforeAll(async () => {
+    originalInsecure = process.env.ALLOW_INSECURE_WEBHOOK;
+    originalNodeEnv = process.env.NODE_ENV;
     await fastify.ready();
     await prisma.stateTransition.deleteMany();
     await prisma.message.deleteMany();
@@ -14,13 +18,14 @@ describe("Twilio Webhook Security (Audit)", () => {
   afterAll(async () => {
     await fastify.close();
     await prisma.$disconnect();
-    process.env.ALLOW_INSECURE_WEBHOOK = "false";
-    process.env.NODE_ENV = "test";
+    process.env.ALLOW_INSECURE_WEBHOOK = originalInsecure;
+    process.env.NODE_ENV = originalNodeEnv;
   });
 
   it("should return 401 if signature is missing or invalid and bypass is disabled", async () => {
+    // Force strict check for this test only
     process.env.ALLOW_INSECURE_WEBHOOK = "false";
-    process.env.NODE_ENV = "production"; // Force strict check
+    process.env.NODE_ENV = "production";
 
     const payload = {
       MessageSid: "SM_SEC_TEST_1",

@@ -30,10 +30,9 @@ process.env.TWILIO_WHATSAPP_FROM = "whatsapp:+14155238886";
 const { prisma } = await import("../src/persistence/prisma.js");
 const { runWorkerOnce } = await import("../src/worker.js");
 type SendFn = () => Promise<{ sid: string }>;
-const { sendWhatsappMessage } =
-  (await import("../src/channel/twilioSend.js")) as {
-    sendWhatsappMessage: jest.Mock<SendFn>;
-  };
+const { sendWhatsappMessage } = (await import("../src/channel/twilioSend.js")) as {
+  sendWhatsappMessage: jest.Mock<SendFn>;
+};
 
 const PAST = new Date(Date.now() - 60_000);
 

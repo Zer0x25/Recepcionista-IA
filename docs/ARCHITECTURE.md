@@ -1,5 +1,7 @@
 # RECEPCIONISTA IA WHATSAPP
+
 # SYSTEM ARCHITECTURE
+
 # Version 0.1 (Prototype)
 
 ## 1. PURPOSE
@@ -26,23 +28,23 @@ Backend is source of truth.
 ## 3. HIGH LEVEL ARCHITECTURE
 
 WhatsApp (Twilio)
-        ↓
+↓
 Webhook (channel)
-        ↓
+↓
 Validation Layer
-        ↓
+↓
 Persistence (DB)
-        ↓
+↓
 Orchestrator (State Machine)
-        ↓
+↓
 Rules Engine (Deterministic)
-        ↓
+↓
 AI Adapter (Optional)
-        ↓
+↓
 Response Builder
-        ↓
+↓
 Persist Outgoing
-        ↓
+↓
 Reply to Channel
 
 ---
@@ -50,13 +52,13 @@ Reply to Channel
 ## 4. MODULE STRUCTURE
 
 src/
- ├─ channel/        # Webhooks, signature verification
- ├─ orchestrator/   # State machine per conversation
- ├─ rules/          # Deterministic business logic
- ├─ ai_adapter/     # OpenAI wrapper
- ├─ persistence/    # Prisma models and DB logic
- ├─ observability/  # Logging and metrics
- └─ server.ts       # Bootstrapping only
+├─ channel/ # Webhooks, signature verification
+├─ orchestrator/ # State machine per conversation
+├─ rules/ # Deterministic business logic
+├─ ai_adapter/ # OpenAI wrapper
+├─ persistence/ # Prisma models and DB logic
+├─ observability/ # Logging and metrics
+└─ server.ts # Bootstrapping only
 
 ---
 

@@ -19,7 +19,7 @@ declare module "fastify" {
   }
 }
 
-fastify.addHook("onRequest", async (request, reply) => {
+fastify.addHook("onRequest", async (request, _reply) => {
   request.requestId = randomUUID();
 });
 
@@ -28,7 +28,12 @@ import rateLimit from "@fastify/rate-limit";
 // Register plugins
 await fastify.register(formBody);
 await fastify.register(rateLimit, {
-  max: env.NODE_ENV === "test" ? 20 : 100,
+  max: () =>
+    process.env.RATE_LIMIT_MAX
+      ? parseInt(process.env.RATE_LIMIT_MAX, 10)
+      : env.NODE_ENV === "test"
+        ? 1000
+        : 100,
   timeWindow: "1 minute",
   hook: "preValidation",
   keyGenerator: (request) => {
@@ -36,7 +41,7 @@ await fastify.register(rateLimit, {
     const from = (request.body as any)?.From;
     return from || request.ip;
   },
-  onExceeding: (request, key) => {
+  onExceeded: (request, key) => {
     logger.warn({
       msg: "Rate limit exceeded",
       eventType: "WEBHOOK_RATE_LIMITED",

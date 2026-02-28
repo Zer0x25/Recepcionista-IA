@@ -13,10 +13,10 @@ describe("getTwilioEnv — env validation", () => {
   const ORIGINAL_ENV = { ...process.env };
 
   beforeEach(() => {
-    // Strip all Twilio vars for isolation
-    delete process.env.TWILIO_ACCOUNT_SID;
-    delete process.env.TWILIO_AUTH_TOKEN;
-    delete process.env.TWILIO_WHATSAPP_FROM;
+    // Set to empty string for isolation (so dotenv doesn't re-fill)
+    process.env.TWILIO_ACCOUNT_SID = "";
+    process.env.TWILIO_AUTH_TOKEN = "";
+    process.env.TWILIO_WHATSAPP_FROM = "";
   });
 
   afterEach(() => {
@@ -97,8 +97,7 @@ describe("sendWhatsappMessage — timeout", () => {
       }),
     }));
 
-    const { sendWhatsappMessage } =
-      await import("../src/channel/twilioSend.js");
+    const { sendWhatsappMessage } = await import("../src/channel/twilioSend.js");
 
     await expect(
       sendWhatsappMessage({

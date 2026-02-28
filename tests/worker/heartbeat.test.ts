@@ -1,5 +1,4 @@
 import { jest } from "@jest/globals";
-
 // Mock dependencies before imports
 jest.unstable_mockModule("../../src/jobs/claim.js", () => ({
   claimNextJobs: jest.fn(),
@@ -9,8 +8,7 @@ jest.unstable_mockModule("../../src/jobs/process.js", () => ({
 }));
 
 const { prisma } = await import("../../src/persistence/prisma.js");
-const { runWorkerOnce, resetHeartbeatState } =
-  await import("../../src/worker.js");
+const { runWorkerOnce, resetHeartbeatState } = await import("../../src/worker.js");
 const { claimNextJobs } = (await import("../../src/jobs/claim.js")) as any;
 
 describe("Worker Heartbeat", () => {

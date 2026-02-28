@@ -1,5 +1,4 @@
 import { jest } from "@jest/globals";
-
 // Mock logger to avoid spamming logs during tests
 // Using relative path without .js extension for the mock as per common Jest ESM pattern if needed
 // or keeping it if it's what the resolver expects.
@@ -29,21 +28,17 @@ describe("Environment Validation", () => {
   });
 
   it("should fail fast if DATABASE_URL is missing", async () => {
-    delete process.env.DATABASE_URL;
-    const exitSpy = jest
-      .spyOn(process, "exit")
-      .mockImplementation((code?: string | number | null | undefined) => {
-        throw new Error(`Process.exit called with ${code}`);
-      });
+    const mockExit = jest.spyOn(process, "exit").mockImplementation((() => {
+      throw new Error("process.exit(1) called");
+    }) as any);
 
-    try {
-      await import("../../src/config/env.js");
-    } catch (err: any) {
-      expect(err.message).toContain("Process.exit called with 1");
-    }
+    process.env.DATABASE_URL = "";
 
-    expect(exitSpy).toHaveBeenCalledWith(1);
-    exitSpy.mockRestore();
+    // Use a dynamic import to trigger validation
+    await expect(import("../../src/config/env.js")).rejects.toThrow("process.exit(1) called");
+    expect(mockExit).toHaveBeenCalledWith(1);
+
+    mockExit.mockRestore();
   });
 
   it("should pass if all required env vars are present and valid", async () => {

@@ -135,13 +135,11 @@ export const AggregatorService = {
       statsByStatus[JobStatus.FAILED].sendFail = eventCounts.SEND_FAIL;
     }
 
-    const collisions =
-      (eventCounts.CLAIM_COLLISION || 0) + (eventCounts.CAS_COLLISION || 0);
+    const collisions = (eventCounts.CLAIM_COLLISION || 0) + (eventCounts.CAS_COLLISION || 0);
     if (collisions > 0 || eventCounts.TTL_EXPIRED) {
       ensureStatus(JobStatus.PENDING);
       statsByStatus[JobStatus.PENDING].collision = collisions;
-      statsByStatus[JobStatus.PENDING].ttlExpired =
-        eventCounts.TTL_EXPIRED || 0;
+      statsByStatus[JobStatus.PENDING].ttlExpired = eventCounts.TTL_EXPIRED || 0;
     }
 
     let totalAvgLatency: number | null = null;
@@ -154,9 +152,7 @@ export const AggregatorService = {
         const jobStatus = status as JobStatus;
 
         const avgLatency =
-          stats.latencyCount > 0
-            ? Math.round(stats.totalLatencyMs / stats.latencyCount)
-            : null;
+          stats.latencyCount > 0 ? Math.round(stats.totalLatencyMs / stats.latencyCount) : null;
 
         if (avgLatency !== null) {
           totalLatencySum += stats.totalLatencyMs;

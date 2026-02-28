@@ -1,16 +1,14 @@
 import { jest } from "@jest/globals";
 import { logger } from "../src/observability/logger.js";
 import { callAI } from "../src/ai_adapter/index.js";
-import { z } from "zod";
 
 describe("AI Adapter Contract Tests", () => {
   let capturedLogs: any[] = [];
-  let logSpy: any;
 
   beforeEach(() => {
     capturedLogs = [];
     // Spy on logger.info and logger.error to verify logs
-    logSpy = jest.spyOn(logger, "info").mockImplementation((obj: any) => {
+    jest.spyOn(logger, "info").mockImplementation((obj: any) => {
       capturedLogs.push(obj);
       return undefined as any;
     });
@@ -38,12 +36,8 @@ describe("AI Adapter Contract Tests", () => {
     expect(response.tokensUsed).toBeGreaterThan(0);
 
     // Verify logging
-    const startLog = capturedLogs.find(
-      (l) => l.eventType === "AI_CALL_STARTED",
-    );
-    const successLog = capturedLogs.find(
-      (l) => l.eventType === "AI_CALL_SUCCEEDED",
-    );
+    const startLog = capturedLogs.find((l) => l.eventType === "AI_CALL_STARTED");
+    const successLog = capturedLogs.find((l) => l.eventType === "AI_CALL_SUCCEEDED");
 
     expect(startLog).toBeDefined();
     expect(startLog.requestId).toBe("test-req-id");
@@ -67,9 +61,7 @@ describe("AI Adapter Contract Tests", () => {
     expect(response.content).toBe("");
     expect(response.error).toBeDefined();
 
-    const failureLog = capturedLogs.find(
-      (l) => l.eventType === "AI_CALL_FAILED",
-    );
+    const failureLog = capturedLogs.find((l) => l.eventType === "AI_CALL_FAILED");
     expect(failureLog).toBeDefined();
     expect(failureLog.error).toMatch(/invalid_type|Required/i);
   });

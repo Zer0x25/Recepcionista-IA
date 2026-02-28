@@ -1,15 +1,3 @@
-/**
- * tests/jobs.worker.test.ts
- *
- * End-to-end test for runWorkerOnce():
- * - Verifies job transitions PENDING → DONE
- * - Verifies exactly 1 OUTBOUND message created with idempotent providerMessageId
- * - Verifies second run creates no additional OUTBOUND message (idempotency)
- *
- * sendWhatsappMessage is mocked — this test focuses on DB/job state, not Twilio.
- * Full Twilio integration is covered in tests/jobs.worker.send.test.ts.
- */
-
 import { jest } from "@jest/globals";
 
 // Mock Twilio send before any other import

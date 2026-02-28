@@ -1,8 +1,8 @@
+import { jest } from "@jest/globals";
 import { fastify } from "../../src/server.js";
 import { prisma } from "../../src/persistence/prisma.js";
 import { setupTestEnv, teardownTestEnv } from "../testUtils.js";
 import { AggregatorState } from "../../src/metrics/aggregator.state.js";
-import { jest } from "@jest/globals";
 
 // Set longer timeout for integration tests
 jest.setTimeout(30000);
@@ -19,6 +19,17 @@ describe("Extended Health Endpoint Integration", () => {
   beforeEach(async () => {
     await prisma.job.deleteMany();
     await prisma.workerHeartbeat.deleteMany();
+    await prisma.conversation.deleteMany();
+
+    // Create required conversations for jobs
+    await prisma.conversation.createMany({
+      data: [
+        { id: "conv-1", providerContact: "+123", state: "NEW" },
+        { id: "conv-2", providerContact: "+456", state: "NEW" },
+        { id: "conv-3", providerContact: "+789", state: "NEW" },
+      ],
+    });
+
     // Reset aggregator state
     AggregatorState.update({
       lastRunAt: null,
@@ -51,6 +62,7 @@ describe("Extended Health Endpoint Integration", () => {
           conversationId: "conv-1",
           status: "PENDING",
           nextRunAt: new Date(now.getTime() - 10000), // Ready
+          createdAt: new Date(now.getTime() - 10000), // Aged
           idempotencyKey: "k1",
           payload: {},
         },
